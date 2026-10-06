@@ -13,6 +13,7 @@ type SourceResult = {
   limitation?: string;
 };
 type Village = { id: string; name: string; lat: number; lng: number; district?: string; inCorr?: boolean; corrDist?: number };
+type GeoJson = { type: "FeatureCollection"; features?: Array<{ properties?: Record<string, unknown>; geometry?: { type?: string; coordinates?: unknown } }> };
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -41,6 +42,23 @@ async function villages(): Promise<Village[]> {
   return Array.isArray(value) ? value : value.villages ?? [];
 }
 
+async function storageJson(path: string): Promise<unknown | null> {
+  const { data, error } = await db.storage.from("jalnetra-tier1").download(path);
+  if (error || !data) return null;
+  try { return JSON.parse(await data.text()); } catch { return null; }
+}
+
+async function tier1VillageEvidence() {
+  const value = await storageJson("village_sentinel1_evidence.geojson") as GeoJson | null;
+  return (value?.features ?? []).map((feature) => ({
+    id: String(feature.properties?.id ?? ""),
+    name: String(feature.properties?.name ?? ""),
+    district: feature.properties?.district ? String(feature.properties.district) : null,
+    evidence: feature.properties?.evidence_status === "affected" ? "observed_satellite" : "no_observed_signal",
+    status: feature.properties?.evidence_status === "affected" ? "observed" : "unaffected_observed",
+  })).filter((v) => v.id);
+}
+
 function fingerprint(villageIds: string[], sourceTime: string) {
   return `${sourceTime}:${villageIds.sort().join(",")}`;
 }
@@ -51,12 +69,13 @@ Deno.serve(async (req) => {
   const suppliedSecret = req.headers.get("x-live-secret") ?? req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   if (!expected || suppliedSecret !== expected) return json({ error: "Unauthorized" }, 401);
 
-  const [rain, river, gauge, radar, villageData] = await Promise.all([
+  const [rain, river, gauge, radar, villageData, storedVillageEvidence] = await Promise.all([
     sourceFetch("NASA GPM IMERG", "NASA_GPM_FEED_URL", "observed"),
     sourceFetch("GloFAS", "GLOFAS_FEED_URL", "forecast"),
     sourceFetch("CWC/local gauge", "CWC_GAUGE_FEED_URL", "observed"),
     sourceFetch("Sentinel-1", "SENTINEL1_FEED_URL", "observed"),
     villages(),
+    tier1VillageEvidence(),
   ]);
   const fetched = [rain, river, gauge, radar];
   await db.from("jn_live_observations").insert(fetched.map(x => ({
@@ -66,7 +85,8 @@ Deno.serve(async (req) => {
 
   const riverValues = river.values as { warning?: boolean; peak_ratio?: number; observed_at?: string } ?? {};
   const radarValues = radar.values as { affected_villages?: string[]; observed_at?: string } ?? {};
-  const observedVillageIds = new Set(radarValues.affected_villages ?? []);
+  const storedObservedVillageIds = new Set(storedVillageEvidence.filter((v) => v.status === "observed").map((v) => v.id));
+  const observedVillageIds = new Set([...storedObservedVillageIds, ...(radarValues.affected_villages ?? [])]);
   const candidates = villageData.filter(v => v.inCorr || observedVillageIds.has(v.id)).map(v => ({
     id: v.id, name: v.name, district: v.district ?? null,
     evidence: observedVillageIds.has(v.id) ? "observed_satellite" : "potential_impact",
@@ -84,5 +104,5 @@ Deno.serve(async (req) => {
     }, { onConflict: "fingerprint" });
     if (error) return json({ error: error.message }, 500);
   }
-  return json({ ok: true, fetched, candidateVillages: candidates.length, sources: fetched.map(x => ({ source: x.source, status: x.status, limitation: x.limitation })) });
+  return json({ ok: true, fetched, tier1: { villageEvidenceFeatures: storedVillageEvidence.length, observedVillageIds: [...storedObservedVillageIds] }, candidateVillages: candidates.length, sources: fetched.map(x => ({ source: x.source, status: x.status, limitation: x.limitation })) });
 });
