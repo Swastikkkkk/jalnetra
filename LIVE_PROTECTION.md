@@ -17,8 +17,8 @@ Supabase scheduled function
   -> fetch timestamped rainfall, river forecast, gauge, and satellite metadata
   -> normalise each source with freshness and coverage
   -> calculate village-level potential impact
-  -> POST only new candidate incidents to /incidents
-  -> operator reviews in the dashboard
+  -> write deduplicated candidates to jn_alert_candidates
+  -> operator reviews via GET/PATCH /alert-candidates
   -> operator sends Hindi call/SMS
   -> alert and acknowledgement are recorded in the incident history
 ```
@@ -65,3 +65,31 @@ confidence/coverage, affected or potential-impact villages, and a safe-place can
 The current Vercel Hobby daily cron is suitable for demonstrations, not emergency response.
 For operational monitoring, run this scheduler in Supabase or AWS at an hourly or
 15-minute cadence and keep the existing incident API contract unchanged.
+
+## Current Supabase deployment
+
+The additive schema is deployed to project `oceaylrebzflgyxfjqfb`. The
+`live-protection` Edge Function is deployed and runs from the Supabase cron job
+`jalnetra-live-protection` every 15 minutes. The scheduler invokes the function
+with a vault-stored secret; provider URLs are intentionally not committed to the
+repository.
+
+Until a provider URL is configured, that source is recorded as `unavailable` and
+no alert candidate is created from it. Configure these Supabase secrets only from
+the project dashboard or CLI:
+
+- `NASA_GPM_FEED_URL`
+- `GLOFAS_FEED_URL`
+- `CWC_GAUGE_FEED_URL`
+- `SENTINEL1_FEED_URL`
+- `LIVE_VILLAGES_URL`
+
+The existing authenticated incident API now exposes the review workflow:
+
+- `GET /alert-candidates?status=pending` lists modelled candidates.
+- `PATCH /alert-candidates/{id}` with `{ "status": "approved" | "dismissed" | "expired" }`
+  records an operator decision. It requires an operator API key.
+
+Approval does not silently claim that a village was flooded. The candidate retains
+its source evidence and modelled/potential-impact label; the operator must still
+send a warning through the existing alert flow.

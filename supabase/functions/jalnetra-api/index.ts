@@ -51,25 +51,6 @@ Deno.serve(async (req) => {
   const { data: who } = await db.from("jn_api_keys").select("owner, role").eq("key_hash", await sha256(key)).maybeSingle();
   if (!who) return json({ error: "Unknown API key" }, 401);
 
-  // GET /alert-candidates -> forecast/modelled warnings awaiting operator review
-  if (req.method === "GET" && path === "/alert-candidates") {
-    const status = url.searchParams.get("status") ?? "pending";
-    const { data, error } = await db.from("jn_alert_candidates").select("*").eq("status", status).order("created_at", { ascending: false }).limit(200);
-    if (error) return json({ error: error.message }, 500);
-    return json({ candidates: data ?? [] });
-  }
-  const candidate = path.match(/^\/alert-candidates\/([0-9a-f-]{36})$/);
-  if (candidate && req.method === "PATCH") {
-    if (who.role !== "operator") return json({ error: "Only operator keys can review alert candidates" }, 403);
-    let b: any;
-    try { b = await req.json(); } catch { return json({ error: "Body must be JSON" }, 400); }
-    if (!["approved", "dismissed", "expired"].includes(b.status)) return json({ error: "status must be approved, dismissed, or expired" }, 400);
-    const { data, error } = await db.from("jn_alert_candidates").update({ status: b.status, reviewed_by: who.owner, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", candidate[1]).select().maybeSingle();
-    if (error) return json({ error: error.message }, 500);
-    if (!data) return json({ error: "Alert candidate not found" }, 404);
-    return json({ candidate: data });
-  }
-
   // POST /incidents : create, or merge into a matching open incident nearby
   if (req.method === "POST" && path === "/incidents") {
     let b: any;
