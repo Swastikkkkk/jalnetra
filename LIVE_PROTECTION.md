@@ -56,6 +56,10 @@ Recommended adapters:
 - ESA WorldCover: land-cover exposure
 - WorldPop/GHSL: estimated exposed population
 
+The first Earth Engine processing plan is in [`earth-engine/`](./earth-engine/).
+It exports Tier 1 Sentinel-1, GPM, DEM/slope, village evidence, and
+administrative-boundary products with source and evidence-status metadata.
+
 ## Alert policy
 
 Forecast/modelled results create a review candidate, not a confirmed affected label.
