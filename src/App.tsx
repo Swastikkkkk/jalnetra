@@ -4,7 +4,7 @@ import { FlyToInterpolator, LinearInterpolator, WebMercatorViewport, type MapVie
 import { BitmapLayer, GeoJsonLayer, PathLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
 import { TripsLayer } from '@deck.gl/geo-layers'
 import { PathStyleExtension } from '@deck.gl/extensions'
-import { FiPlay, FiPause, FiSkipBack, FiSkipForward, FiX, FiNavigation, FiVolume2, FiPhoneCall, FiArrowRight, FiArrowLeft, FiMap, FiRotateCcw } from 'react-icons/fi'
+import { FiPlay, FiPause, FiSkipBack, FiSkipForward, FiX, FiNavigation, FiVolume2, FiPhoneCall, FiArrowRight, FiArrowLeft, FiMap, FiRotateCcw, FiRadio, FiShield } from 'react-icons/fi'
 import D from './data.json'
 import s2 from './img/s2.jpg'
 import o1 from './img/o1.png'
@@ -407,6 +407,7 @@ export default function App() {
         </div>
         <button className="storybtn" onClick={startStory}><FiRotateCcw /> Story</button>
         <button className="storybtn" onClick={openOps}>Operations</button>
+        <div className={`live-chip ${live.level}`}><FiRadio /> <span>Live protection</span><b>{live.level === 'warning' ? 'Warning' : live.level === 'watch' ? 'Watch' : 'Monitoring'}</b></div>
         <div className="seg" aria-label="Basemap">
           <button className={sat ? 'on' : ''} onClick={() => setSat(true)}>Satellite</button>
           <button className={!sat ? 'on' : ''} onClick={() => setSat(false)}>Map</button>
@@ -422,6 +423,11 @@ export default function App() {
       <aside className="panel">
         {sel ? <VillageCard v={sel} state={states.get(sel.id)!} obs={mode === 'today' ? OBS[LATEST] : mode === 'active' ? curObs : null} onClose={() => setSel(null)} /> : reach ? <ReachCard r={reach} t={t} onClose={() => setReach(null)} /> : (
           <>
+            <section className="protection-card">
+              <div className="protection-head"><div><div className="kicker live">Protection mode</div><div className="h">Evidence before alarm</div></div><FiShield /></div>
+              <p className="note">Forecast and satellite evidence are kept separate. Confirmed impact is only shown when radar water is observed at a village.</p>
+              <div className="freshness"><span>Latest live refresh</span><b>{new Date(live.fetched).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} UTC</b></div>
+            </section>
             {mode === 'today' ? <TodayCard live={live} /> : mode === 'active' && curObs ? (
               <section>
                 <div className="kicker live">Flood event detected</div>
