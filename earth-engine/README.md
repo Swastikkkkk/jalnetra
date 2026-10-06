@@ -23,8 +23,11 @@ The exports are deliberately separate:
 - observed GPM rainfall summary
 - modelled DEM and slope
 
-The repository includes the generated 291-village upload file:
+The repository includes generated 291-village upload files:
 [`jalnetra_villages.geojson`](./jalnetra_villages.geojson).
+For the Earth Engine upload dialog, use the CSV version:
+[`jalnetra_villages.csv`](./jalnetra_villages.csv). It has `latitude` and
+`longitude` columns, which Earth Engine converts into point geometry.
 
 The script does not make GPM or terrain look like observed flooding, and it does not turn a river corridor into a flood polygon. The Sentinel-1 threshold is a documented starting method that should be validated against the event and adjusted only with evidence.
 
