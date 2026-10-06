@@ -23,6 +23,9 @@ The exports are deliberately separate:
 - observed GPM rainfall summary
 - modelled DEM and slope
 
+The repository includes the generated 291-village upload file:
+[`jalnetra_villages.geojson`](./jalnetra_villages.geojson).
+
 The script does not make GPM or terrain look like observed flooding, and it does not turn a river corridor into a flood polygon. The Sentinel-1 threshold is a documented starting method that should be validated against the event and adjusted only with evidence.
 
 ## What is not automated yet
