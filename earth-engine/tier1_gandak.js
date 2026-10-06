@@ -52,13 +52,16 @@ var floodMask = s1Baseline.subtract(s1Event).gt(2.5)
   .unmask(0)
   .clip(region);
 var observedFloodMask = floodMask.selfMask();
-var floodVectors = observedFloodMask.reduceToVectors({
+var connectedFlood = observedFloodMask
+  .updateMask(observedFloodMask.connectedPixelCount(100, true).gte(9));
+var floodVectors = connectedFlood.reduceToVectors({
   geometry: region,
-  scale: 10,
+  scale: 30,
   geometryType: 'polygon',
   eightConnected: true,
-  maxPixels: 1e10,
+  maxPixels: 1e8,
   bestEffort: true,
+  tileScale: 4,
 });
 floodVectors = floodVectors.map(function(feature) {
   return feature.set({
@@ -101,7 +104,7 @@ var villageEvidence = villages.map(function(village) {
 
 Map.centerObject(region, 8);
 Map.addLayer(s1Event, {min: -25, max: 0}, 'Sentinel-1 event', false);
-Map.addLayer(observedFloodMask, {palette: ['ff3b30']}, 'OBSERVED flood mask');
+Map.addLayer(connectedFlood, {palette: ['ff3b30']}, 'OBSERVED flood mask');
 Map.addLayer(rain24h, {min: 0, max: 300, palette: ['fff7bc', 'fec44f', 'd95f0e']}, 'OBSERVED GPM rainfall', false);
 Map.addLayer(dem, {min: 20, max: 500, palette: ['0b132b', '3a86ff', 'fefae0']}, 'MODELLED terrain', false);
 
