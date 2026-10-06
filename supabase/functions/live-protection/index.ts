@@ -48,7 +48,8 @@ function fingerprint(villageIds: string[], sourceTime: string) {
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "POST required" }, 405);
   const expected = Deno.env.get("LIVE_PROTECTION_SECRET");
-  if (!expected || req.headers.get("authorization") !== `Bearer ${expected}`) return json({ error: "Unauthorized" }, 401);
+  const suppliedSecret = req.headers.get("x-live-secret") ?? req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!expected || suppliedSecret !== expected) return json({ error: "Unauthorized" }, 401);
 
   const [rain, river, gauge, radar, villageData] = await Promise.all([
     sourceFetch("NASA GPM IMERG", "NASA_GPM_FEED_URL", "observed"),
