@@ -17,7 +17,7 @@ import OpsPanel, { useIncidents } from './OpsPanel'
 import { alertContext, hasKey, sendAlerts, type Incident } from './ops'
 
 type V = (typeof D.villages)[number]
-type State = 'affected' | 'atrisk' | 'watch' | 'safe'
+type State = 'affected' | 'affected_nearby' | 'potentially_exposed' | 'watch' | 'unaffected_observed' | 'data_unavailable'
 type Mode = 'early' | 'active' | 'today'
 const OBS_IMG: Record<string, string> = { o1, o2, o3 }
 const BOUNDS = D.bounds as [number, number, number, number]
@@ -35,8 +35,15 @@ const fmtTime = (iso: string) => {
   return `${t.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })} · ${t.toISOString().slice(11, 16)} UTC`
 }
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', timeZone: 'UTC' })
-const STATE_LABEL: Record<State, string> = { affected: 'Affected', atrisk: 'At risk', watch: 'Watch', safe: 'Safe' }
-const STATE_RGB: Record<State, [number, number, number]> = { affected: [56, 189, 248], atrisk: [245, 158, 11], watch: [253, 224, 71], safe: [148, 163, 184] }
+const STATE_LABEL: Record<State, string> = {
+  affected: 'Affected · observed', affected_nearby: 'Affected nearby · observed',
+  potentially_exposed: 'Potential impact · modelled', watch: 'Watch',
+  unaffected_observed: 'No observed flood signal', data_unavailable: 'Data unavailable',
+}
+const STATE_RGB: Record<State, [number, number, number]> = {
+  affected: [248, 113, 113], affected_nearby: [251, 146, 60], potentially_exposed: [192, 132, 252],
+  watch: [253, 224, 71], unaffected_observed: [148, 163, 184], data_unavailable: [71, 85, 105],
+}
 const st = D.river.stations
 const interpQ = (q: number[], t: number) => { const i = Math.max(0, Math.min(Math.floor(t), q.length - 2)); const f = Math.min(Math.max(t - i, 0), 1); return q[i] * (1 - f) + q[i + 1] * f }
 const baseQ = st.map(s => Math.min(...s.q.slice(0, 10)))
@@ -82,14 +89,15 @@ async function fetchLive(): Promise<typeof LIVE | null> {
   } catch { return null }
 }
 function villageState(v: V, mode: Mode, obsIdx: number): State {
-  if (mode === 'today') obsIdx = LATEST
-  if (mode !== 'early' && obsIdx >= 0) {
-    const d = (v.obs as Record<string, number | null>)[OBS[obsIdx].id]
-    if (d !== null && d !== undefined && d <= 0.5) return 'affected'
-  }
-  if (v.inCorr) return 'atrisk'
+  const last = mode === 'today' ? LATEST : obsIdx
+  const observed = OBS.slice(0, last + 1)
+    .map(o => (v.obs as Record<string, number | null>)[o.id])
+    .filter((d): d is number => d !== null && d !== undefined)
+  if (observed.some(d => d <= 0.5)) return 'affected'
+  if (observed.some(d => d <= 2)) return 'affected_nearby'
+  if (v.inCorr) return 'potentially_exposed'
   if (v.corrDist <= 2) return 'watch'
-  return 'safe'
+  return observed.length > 0 ? 'unaffected_observed' : 'data_unavailable'
 }
 
 
@@ -98,7 +106,7 @@ const rainPeak = (() => { let best = { mm: 0, day: 0 }; D.rain.points.forEach(p 
 const rainTotal = (from: number, to: number) => Math.round(Math.max(...D.rain.points.map(p => p.p.slice(from, to + 1).reduce((a, b) => a + b, 0))))
 const O2 = OBS.find(o => o.id === 'o2')!
 const o2Idx = OBS.indexOf(O2)
-const o2Counts = (() => { const c: Record<State, number> = { affected: 0, atrisk: 0, watch: 0, safe: 0 }; D.villages.forEach(v => c[villageState(v, 'active', o2Idx)]++); return c })()
+const o2Counts = (() => { const c: Record<State, number> = { affected: 0, affected_nearby: 0, potentially_exposed: 0, watch: 0, unaffected_observed: 0, data_unavailable: 0 }; D.villages.forEach(v => c[villageState(v, 'active', o2Idx)]++); return c })()
 const SPOT = D.villages.find(v => v.id === (D as any).spotlight) ?? D.villages[0]
 type Step = { title: string; kicker: string; body: string; facts?: [string, string][]; view?: Partial<MapViewState> | 'fit'; t: number; mode: Mode; layers: Partial<Record<'observed' | 'route' | 'corridor' | 'villages' | 'roads' | 'shelters', boolean>>; normal?: boolean; select?: number; play?: { from: number; to: number }; chart?: number; legend?: boolean; rain?: boolean; today?: boolean }
 const STEPS: Step[] = [
@@ -129,7 +137,7 @@ const STEPS: Step[] = [
   { kicker: 'Step 6 · Who is at risk', title: 'Villages along the corridor', t: O2.day + 0.01, mode: 'active', view: 'fit',
     layers: { route: true, villages: true, corridor: true, observed: true }, legend: true,
     body: `The amber outline is JalNetra\u2019s predicted risk corridor: land within 12 km of the river and less than 5 m above it. Each dot is a village, coloured by what the data shows.`,
-    facts: [['Affected', `${o2Counts.affected} villages, radar saw water within 500 m`], ['At risk', `${o2Counts.atrisk} more inside the corridor`], ['Watch', `${o2Counts.watch} within 2 km of it`]] },
+    facts: [['Observed affected', `${o2Counts.affected} villages, Sentinel-1 saw water within 500 m`], ['Observed nearby', `${o2Counts.affected_nearby} villages, water was within 2 km`], ['Potential impact', `${o2Counts.potentially_exposed} villages inside the modelled corridor`]] },
   { kicker: 'Step 7 · The warning', title: `Calling ${SPOT.name}`, t: O2.day + 0.01, mode: 'active', view: { longitude: SPOT.lng, latitude: SPOT.lat, zoom: 10.8 },
     layers: { route: true, villages: true, corridor: true, observed: true }, select: SPOT.id,
     body: `${SPOT.name} in ${SPOT.district} district had flood water at the village on 29 September. JalNetra writes the warning in Hindi and reads it out, so it works on any basic phone call.`,
@@ -256,7 +264,7 @@ export default function App() {
   const startStory = () => { setPhase('story'); applyStep(0) }
   const explore = () => { setPhase('explore'); setStep(0); setLayers({ observed: true, route: true, corridor: true, villages: true, roads: false, shelters: false }); setNormalOn(false); setMode('active'); setT(OBS[1].day + 0.01); fly({ ...fit(0) }) }
   const states = useMemo(() => new Map(D.villages.map(v => [v.id, villageState(v, mode, obsIdx)])), [mode, obsIdx])
-  const counts = useMemo(() => { const c: Record<State, number> = { affected: 0, atrisk: 0, watch: 0, safe: 0 }; states.forEach(s => c[s]++); return c }, [states])
+  const counts = useMemo(() => { const c: Record<State, number> = { affected: 0, affected_nearby: 0, potentially_exposed: 0, watch: 0, unaffected_observed: 0, data_unavailable: 0 }; states.forEach(s => c[s]++); return c }, [states])
 
   // flow particles: trips per river segment, brightness follows that segment's flow
   const trips = useMemo(() => {
@@ -307,12 +315,12 @@ export default function App() {
   if (layers.shelters) L.push(new ScatterplotLayer({ id: 'shelters', data: D.shelters, getPosition: (d: any) => [d.lng, d.lat], getRadius: 4.5, radiusUnits: 'pixels', getFillColor: [52, 211, 153], stroked: true, getLineColor: [6, 30, 22], lineWidthMinPixels: 1, pickable: true }))
   if (layers.villages) L.push(new ScatterplotLayer({
     id: 'villages', data: D.villages, getPosition: (d: V) => [d.lng, d.lat], radiusUnits: 'pixels',
-    getRadius: (d: V) => (sel?.id === d.id ? 8 : states.get(d.id) === 'safe' ? 3.2 : 4.6),
+    getRadius: (d: V) => (sel?.id === d.id ? 8 : ['unaffected_observed', 'data_unavailable'].includes(states.get(d.id)!) ? 3.2 : 4.6),
     getFillColor: (d: V) => [...STATE_RGB[states.get(d.id)!], 240] as any, stroked: true, getLineColor: (d: V) => (sel?.id === d.id ? [255, 255, 255, 255] : [8, 10, 14, 220]), lineWidthMinPixels: 1.2,
     pickable: true, onClick: (i: PickingInfo) => { setSel(i.object as V); setReach(null); setFollow(false) },
     updateTriggers: { getFillColor: [mode, obsIdx], getRadius: [mode, obsIdx, sel?.id], getLineColor: sel?.id },
   }))
-  if (layers.villages && (view.zoom ?? 0) >= 9.6) L.push(new TextLayer({ id: 'vlabels', data: D.villages.filter(v => states.get(v.id) !== 'safe'), getPosition: (d: V) => [d.lng, d.lat], getText: (d: V) => d.name, getSize: 11, getPixelOffset: [8, 0], getTextAnchor: 'start', getColor: [241, 245, 249, 230], fontFamily: FONT, fontWeight: 500, characterSet: 'auto', outlineWidth: 3, outlineColor: [0, 0, 0, 200], fontSettings: { sdf: true } }))
+  if (layers.villages && (view.zoom ?? 0) >= 9.6) L.push(new TextLayer({ id: 'vlabels', data: D.villages.filter(v => !['unaffected_observed', 'data_unavailable'].includes(states.get(v.id)!)), getPosition: (d: V) => [d.lng, d.lat], getText: (d: V) => d.name, getSize: 11, getPixelOffset: [8, 0], getTextAnchor: 'start', getColor: [241, 245, 249, 230], fontFamily: FONT, fontWeight: 500, characterSet: 'auto', outlineWidth: 3, outlineColor: [0, 0, 0, 200], fontSettings: { sdf: true } }))
   const selSh = sel ? (sel as any).shelter : null
   if (selSh) {
     L.push(new PathLayer({ id: 'to-shelter', data: [{ path: [[sel!.lng, sel!.lat], [selSh.lng, selSh.lat]] }], getPath: (d: any) => d.path, getColor: [52, 211, 153, 230], getWidth: 2, widthUnits: 'pixels', getDashArray: [4, 3], dashJustified: true, extensions: [new PathStyleExtension({ dash: true })] }))
@@ -423,7 +431,7 @@ export default function App() {
                   <dt>Radar coverage</dt><dd>{Math.round(curObs.coverage * 100)}% of the map</dd>
                 </dl>
                 <div className="kicker mt">Downstream analysis</div>
-                <p className="note">{analyzing ? 'Analyzing connected downstream regions…' : `${counts.affected} villages have observed water within 500 m. ${counts.atrisk} more sit inside the risk corridor.`}</p>
+                <p className="note">{analyzing ? 'Analyzing connected downstream regions…' : `${counts.affected} villages have observed water within 500 m. ${counts.potentially_exposed} more are potential impact, not confirmed flooding.`}</p>
               </section>
             ) : (
               <section>
@@ -435,7 +443,7 @@ export default function App() {
                   <dt>{st[0].label}</dt><dd>{Math.round(interpQ(st[0].q, t)).toLocaleString()} m³/s</dd>
                   <dt>{st[st.length - 1].label}</dt><dd>{Math.round(interpQ(st[st.length - 1].q, t)).toLocaleString()} m³/s</dd>
                 </dl>
-                <p className="note">{counts.atrisk} villages sit inside the risk corridor and {counts.watch} within 2 km of it.</p>
+                <p className="note">{counts.potentially_exposed} villages sit inside the modelled corridor; {counts.watch} are on watch. These are not confirmed affected.</p>
               </section>
             )}
             <section>
@@ -558,10 +566,10 @@ function Legend() {
   return (
     <section className="legend">
       <div className="kicker">Key</div>
-      <div className="row"><i className="sw obs" />Observed new water, Sentinel-1</div>
-      <div className="row"><i className="sw corr" />Risk corridor, predicted</div>
+      <div className="row"><i className="sw obs" />OBSERVED FLOOD WATER · Sentinel-1</div>
+      <div className="row"><i className="sw corr" />POTENTIAL IMPACT · modelled corridor</div>
       <div className="row"><i className="sw flow" />Expected downstream pathway</div>
-      <div className="row dots">{(['affected', 'atrisk', 'watch', 'safe'] as State[]).map(s => <span key={s}><i style={{ background: `rgb(${STATE_RGB[s].join(',')})` }} />{STATE_LABEL[s]}</span>)}</div>
+      <div className="row dots">{(['affected', 'affected_nearby', 'potentially_exposed', 'watch', 'unaffected_observed', 'data_unavailable'] as State[]).map(s => <span key={s}><i style={{ background: `rgb(${STATE_RGB[s].join(',')})` }} />{STATE_LABEL[s]}</span>)}</div>
     </section>
   )
 }
@@ -586,7 +594,8 @@ function VillageCard({ v, state, obs, onClose, bare, onCall }: { v: V; state: St
       {!bare && <div className="vhead"><div><div className="kicker">{v.district ? `${v.district} district` : 'District not listed'}</div><div className="h">{v.name}</div></div><button className="x" onClick={onClose} aria-label="Close"><FiX /></button></div>}
       <div className={'pill ' + state}>{STATE_LABEL[state]}</div>
       <dl className="kv">
-        <dt>Observed water</dt><dd>{!obs ? 'Switch to Active flood' : d === null || d === undefined ? 'No radar coverage here' : d <= 0.5 ? 'At the village' : `${d.toFixed(1)} km away`}</dd>
+        <dt>Evidence</dt><dd>{state === 'affected' ? 'Observed at the village' : state === 'affected_nearby' ? 'Observed nearby, not intersecting' : state === 'potentially_exposed' ? 'Modelled corridor only' : state === 'watch' ? 'Near modelled corridor' : state === 'unaffected_observed' ? 'No observed flood signal' : 'No observation coverage'}</dd>
+        <dt>Observed water</dt><dd>{!obs ? 'No pass selected' : d === null || d === undefined ? 'No radar coverage here' : d <= 0.5 ? 'At the village' : `${d.toFixed(1)} km away`}</dd>
         <dt>Arrival time</dt><dd>Arrival time unavailable</dd>
         <dt>Data time</dt><dd>{obs ? `Sentinel-1 ${fmtTime(obs.time)}` : `GloFAS daily, ${fmtDay(s.peakDay)}`}</dd>
         <dt>Safe place</dt><dd>{sh ? `${sh.name} (${sh.amenity}), ${sh.km} km straight line` : 'None mapped within 12 km outside the risk zone'}</dd>
