@@ -29,6 +29,7 @@ const DAYS = D.days
 const dayOf = (iso: string) => (Date.parse(iso) - START) / 864e5
 const OBS = D.obs.map(o => ({ ...o, day: dayOf(o.time) }))
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", Helvetica, Arial, sans-serif'
+const ALERT_PHONE = '+919582626655'
 const fmtDay = (d: number) => new Date(START + Math.floor(d) * 864e5).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
 const fmtTime = (iso: string) => {
   const t = new Date(iso)
@@ -250,11 +251,11 @@ export default function App() {
       setStoryCall(`No shared API incident is linked to ${v.name} yet.`)
       return
     }
-    setStoryCall('Placing the Hindi call to the configured demo phone…')
+    setStoryCall(`Placing the Hindi call to ${ALERT_PHONE}…`)
     try {
       const result = await sendAlerts(incident.id, [], `नमस्ते। ${v.name} के लोगों के लिए जलनेत्र की बाढ़ चेतावनी। कृपया ऊँची सुरक्षित जगह पर जाएँ और पंचायत को सूचित करें।`, 'call', { demo: true, context: alertContext(incident) })
       const sent = result.results.some(r => r.status === 'sent')
-      setStoryCall(sent ? 'Hindi call placed to the configured demo phone.' : 'The call was logged, but no phone provider accepted it.')
+      setStoryCall(sent ? `Hindi call placed to ${ALERT_PHONE}.` : 'The call was logged, but no phone provider accepted it.')
     } catch (e) {
       setStoryCall((e as Error).message)
     }
@@ -379,7 +380,7 @@ export default function App() {
           {STEPS[step].legend && <Legend />}
           {STEPS[step].today && <TodayCard bare live={live} />}
           {sel && STEPS[step].select && <VillageCard v={sel} state={states.get(sel.id)!} obs={curObs} onClose={() => setSel(null)} bare onCall={() => callStoryVillage(sel)} />}
-          {step === 6 && <button className="speak" onClick={() => callStoryVillage(SPOT)}><FiPhoneCall /> {storyCall ? 'Call again' : `Call ${SPOT.name}`}</button>}
+          {step === 6 && <button className="speak" onClick={() => callStoryVillage(SPOT)}><FiPhoneCall /> {storyCall ? 'Call again' : `Call ${SPOT.name} · ${ALERT_PHONE}`}</button>}
           {storyCall && step === 6 && <p className="note">{storyCall}</p>}
           <div className="sdate">{fmtDay(t)}{playing ? ' · playing' : ''}</div>
           <div className="snav">
@@ -606,7 +607,7 @@ function VillageCard({ v, state, obs, onClose, bare, onCall }: { v: V; state: St
       <div className="kicker mt">Hindi warning</div>
       <p className="hi">{hindi}</p>
       <button className="speak" onClick={speak}><FiVolume2 /> Play in browser</button>
-      {onCall && <button className="speak" onClick={onCall}><FiPhoneCall /> Call through JalNetra</button>}
+      {onCall && <button className="speak" onClick={onCall}><FiPhoneCall /> Call {ALERT_PHONE} through JalNetra</button>}
     </section>
   )
 }

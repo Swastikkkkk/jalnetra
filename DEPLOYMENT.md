@@ -32,6 +32,10 @@ Set these in the Vercel project settings for Production:
 | `RADAR_FEED_URL` | HTTPS JSON feed containing the latest radar detections |
 | `JALNETRA_ALERT_CONTACT_IDS` | Optional comma-separated contact IDs. If empty, the configured demo phone is called. |
 
+For the manual story call, set the API's `jn_config.alert_phone` value to
+`+919582626655`. The UI labels the action with this number, but the API remains the
+source of truth for the actual destination and provider.
+
 The browser never receives `JALNETRA_KEY` or `CRON_SECRET`. Do not use an operator key as
 `VITE_JALNETRA_KEY` on a public deployment.
 
