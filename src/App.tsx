@@ -21,7 +21,9 @@ type State = 'affected' | 'atrisk' | 'watch' | 'safe'
 type Mode = 'early' | 'active' | 'today'
 const OBS_IMG: Record<string, string> = { o1, o2, o3 }
 const BOUNDS = D.bounds as [number, number, number, number]
-const S2B = ((D as any).s2bounds ?? D.bounds) as [number, number, number, number]
+// The source mosaic is portrait-oriented; extend its display footprint so the
+// satellite base fills the wide map viewport instead of exposing the dark basemap.
+const SATELLITE_VIEW_BOUNDS: [number, number, number, number] = [82.0, 24.8, 87.15, 29.15]
 const START = Date.parse(D.start)
 const DAYS = D.days
 const dayOf = (iso: string) => (Date.parse(iso) - START) / 864e5
@@ -275,7 +277,7 @@ export default function App() {
   const L: any[] = []
   L.push(new GeoJsonLayer({ id: 'countries', data: countries as any, filled: true, stroked: true, getFillColor: [16, 19, 24], getLineColor: [70, 78, 92], lineWidthMinPixels: 1 }))
   L.push(new PathLayer({ id: 'network-map', data: D.network, getPath: (d: any) => d, getColor: [70, 110, 150], widthMinPixels: 1 }))
-  if (sat) L.push(new BitmapLayer({ id: 's2', image: s2, bounds: S2B }))
+  if (sat) L.push(new BitmapLayer({ id: 's2', image: s2, bounds: SATELLITE_VIEW_BOUNDS }))
   if (normalOn) L.push(new BitmapLayer({ id: 'normal', image: normalImg, bounds: BOUNDS, opacity: 0.9 }))
   if (layers.corridor) L.push(new BitmapLayer({ id: 'corridor', image: corridorImg, bounds: BOUNDS, opacity: sat ? 0.7 : 0.8 }))
   if (layers.roads) L.push(new PathLayer({
