@@ -4,7 +4,7 @@ import { FlyToInterpolator, LinearInterpolator, WebMercatorViewport, type MapVie
 import { BitmapLayer, GeoJsonLayer, PathLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
 import { TripsLayer } from '@deck.gl/geo-layers'
 import { PathStyleExtension } from '@deck.gl/extensions'
-import { FiPlay, FiPause, FiSkipBack, FiSkipForward, FiX, FiNavigation, FiVolume2, FiArrowRight, FiArrowLeft, FiMap, FiRotateCcw } from 'react-icons/fi'
+import { FiPlay, FiPause, FiSkipBack, FiSkipForward, FiX, FiNavigation, FiVolume2, FiPhoneCall, FiArrowRight, FiArrowLeft, FiMap, FiRotateCcw } from 'react-icons/fi'
 import D from './data.json'
 import s2 from './img/s2.jpg'
 import o1 from './img/o1.png'
@@ -13,8 +13,8 @@ import o3 from './img/o3.png'
 import corridorImg from './img/corridor.png'
 import normalImg from './img/normal.png'
 import countries from './countries.json'
-import OpsPanel, { useIncidents } from './Ops'
-import type { Incident } from './ops'
+import OpsPanel, { useIncidents } from './OpsPanel'
+import { alertContext, hasKey, sendAlerts, type Incident } from './ops'
 
 type V = (typeof D.villages)[number]
 type State = 'affected' | 'atrisk' | 'watch' | 'safe'
@@ -158,6 +158,7 @@ export default function App() {
   const [anim, setAnim] = useState(0)
   const [phase, setPhase] = useState<'landing' | 'story' | 'explore' | 'ops'>('landing')
   const inc = useIncidents()
+  const [storyCall, setStoryCall] = useState<string | null>(null)
   const [opsSel, setOpsSel] = useState<string | null>(null)
   const [step, setStep] = useState(0)
   const [normalOn, setNormalOn] = useState(false)
@@ -227,6 +228,26 @@ export default function App() {
     if (s.view === 'fit') fly({ ...fit(panelW) }); else if (s.view) fly(s.view)
     if (s.select) setSel(D.villages.find(v => v.id === s.select) ?? null)
     if (s.play) { playTo.current = s.play.to; setT(s.play.from); setFollow(true); lastFollow.current = -1; setTimeout(() => setPlaying(true), 1200) }
+  }
+  const callStoryVillage = async (v: V) => {
+    if (!hasKey()) {
+      setStoryCall('Connect the operator dashboard first, then return here to place the call.')
+      setPhase('ops')
+      return
+    }
+    const incident = inc.items.find(i => i.incident_type === 'river_flood' && (i.details?.villages ?? []).includes(v.name))
+    if (!incident) {
+      setStoryCall(`No shared API incident is linked to ${v.name} yet.`)
+      return
+    }
+    setStoryCall('Placing the Hindi call to the configured demo phone…')
+    try {
+      const result = await sendAlerts(incident.id, [], `नमस्ते। ${v.name} के लोगों के लिए जलनेत्र की बाढ़ चेतावनी। कृपया ऊँची सुरक्षित जगह पर जाएँ और पंचायत को सूचित करें।`, 'call', { demo: true, context: alertContext(incident) })
+      const sent = result.results.some(r => r.status === 'sent')
+      setStoryCall(sent ? 'Hindi call placed to the configured demo phone.' : 'The call was logged, but no phone provider accepted it.')
+    } catch (e) {
+      setStoryCall((e as Error).message)
+    }
   }
   const selectInc = (i: Incident | null) => { setOpsSel(i?.id ?? null); if (i) fly({ longitude: i.lng, latitude: i.lat, zoom: Math.max(view.zoom ?? 8, 9.5) }) }
   const openOps = () => { setPhase('ops'); setSel(null); setReach(null); setPlaying(false); setFollow(false); fly({ ...fit(0) }) }
@@ -347,7 +368,9 @@ export default function App() {
           {STEPS[step].chart !== undefined && <Spark q={st[STEPS[step].chart!].q} t={t} peakDay={st[STEPS[step].chart!].peakDay} />}
           {STEPS[step].legend && <Legend />}
           {STEPS[step].today && <TodayCard bare live={live} />}
-          {sel && STEPS[step].select && <VillageCard v={sel} state={states.get(sel.id)!} obs={curObs} onClose={() => setSel(null)} bare />}
+          {sel && STEPS[step].select && <VillageCard v={sel} state={states.get(sel.id)!} obs={curObs} onClose={() => setSel(null)} bare onCall={() => callStoryVillage(sel)} />}
+          {step === 6 && <button className="speak" onClick={() => callStoryVillage(SPOT)}><FiPhoneCall /> {storyCall ? 'Call again' : `Call ${SPOT.name}`}</button>}
+          {storyCall && step === 6 && <p className="note">{storyCall}</p>}
           <div className="sdate">{fmtDay(t)}{playing ? ' · playing' : ''}</div>
           <div className="snav">
             <button onClick={() => (step === 0 ? setPhase('landing') : applyStep(step - 1))}><FiArrowLeft /> Back</button>
@@ -541,7 +564,7 @@ function Legend() {
   )
 }
 
-function VillageCard({ v, state, obs, onClose, bare }: { v: V; state: State; obs: (typeof OBS)[number] | null; onClose: () => void; bare?: boolean }) {
+function VillageCard({ v, state, obs, onClose, bare, onCall }: { v: V; state: State; obs: (typeof OBS)[number] | null; onClose: () => void; bare?: boolean; onCall?: () => void }) {
   const d = obs ? (v.obs as Record<string, number | null>)[obs.id] : undefined
   const s = st[v.si]
   const reasons: string[] = []
@@ -572,6 +595,7 @@ function VillageCard({ v, state, obs, onClose, bare }: { v: V; state: State; obs
       <div className="kicker mt">Hindi warning</div>
       <p className="hi">{hindi}</p>
       <button className="speak" onClick={speak}><FiVolume2 /> Play in browser</button>
+      {onCall && <button className="speak" onClick={onCall}><FiPhoneCall /> Call through JalNetra</button>}
     </section>
   )
 }
