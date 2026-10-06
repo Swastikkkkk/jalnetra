@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 type RadarDetection = {
   incident_type?: 'river_flood' | 'waterlogging' | 'pothole' | 'leak'
   severity: 'low' | 'medium' | 'high'
