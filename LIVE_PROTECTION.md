@@ -59,6 +59,8 @@ Recommended adapters:
 The first Earth Engine processing plan is in [`earth-engine/`](./earth-engine/).
 It exports Tier 1 Sentinel-1, GPM, DEM/slope, village evidence, and
 administrative-boundary products with source and evidence-status metadata.
+Tier 2 context exports for historical surface water and land cover are documented
+in [`earth-engine/TIER2_README.md`](./earth-engine/TIER2_README.md).
 
 ## Alert policy
 
