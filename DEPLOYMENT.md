@@ -15,7 +15,8 @@ Import the project into Vercel with:
 - **Output directory:** `dist`
 - **Root directory:** `jalnetra-flood-map` (when importing the parent folder)
 
-`vercel.json` runs the radar worker every 15 minutes at `/api/cron/radar-alerts`.
+`vercel.json` runs the radar worker once daily at `/api/cron/radar-alerts`, which is
+supported on Vercel's Hobby plan.
 
 ## 2. Configure environment variables
 
@@ -62,8 +63,8 @@ The browser never receives `JALNETRA_KEY` or `CRON_SECRET`. Do not use an operat
 ```
 
 The shared API merges detections that are already open and nearby. The cron worker only
-places calls for incidents returned as `merged: false`, so repeated feed polls do not call
-the same open incident every 15 minutes.
+places calls for incidents returned as `merged: false`, so repeated daily polls do not call
+the same open incident again.
 
 ## 4. Verify after deployment
 
