@@ -5,7 +5,7 @@ import s2 from '../img/s2.jpg'
 import { fmtIST } from './shared'
 
 type Pub = { river: { created_at: string; points: number; normal: number; rising: number; warning: number; danger: number; headline: string; flagged: { river: string; near: string; status: string; trend?: string }[] } | null; gandak: { created_at: string; river: string; at_risk: number; overall: string } | null }
-export default function Home({ onRivers, onLive, onDemo, onValidate, onOps, onStory }: { onRivers: () => void; onLive: () => void; onDemo: () => void; onValidate: () => void; onOps: () => void; onStory: () => void }) {
+export default function Home({ onRivers, onLive, onValidate, onOps, onStory }: { onRivers: () => void; onLive: () => void; onDemo: () => void; onValidate: () => void; onOps: () => void; onStory: () => void }) {
   const [pub, setPub] = useState<Pub | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -22,9 +22,9 @@ export default function Home({ onRivers, onLive, onDemo, onValidate, onOps, onSt
           <p className="tag rv">Predicting where the water goes before it gets there.</p>
           <p className="sub rv">Every few hours JalNetra checks the river forecast for India's major rivers. When a river is heading above its usual monsoon highs, it lists the low-lying villages nearby, and an operator approves a Hindi AI call to the sarpanch.</p>
           <div className="hbtns rv">
-            <button className="primary" onClick={onRivers}><FiActivity /> Rivers of India, live</button>
+            <button className="primary" onClick={onStory}><FiPlayCircle /> Watch the August glacier story</button>
+            <button onClick={onRivers}><FiActivity /> Rivers of India, live</button>
             <button onClick={onLive}>Gandak village model</button>
-            <button onClick={onDemo}><FiPlayCircle /> Replay the Gandak flood</button>
           </div>
           <div className="hlinks rv"><button className="link" onClick={onValidate}><FiClock /> 2026 validation</button><button className="link" onClick={onStory}>Story: the August 2026 glacier flood</button><button className="link" onClick={onOps}><FiList /> Incidents</button></div>
           <div className="flow rv">DETECT <FiArrowRight /> PREDICT <FiArrowRight /> WARN <FiArrowRight /> EVACUATE <FiArrowRight /> VERIFY</div>

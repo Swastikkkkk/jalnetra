@@ -16,7 +16,10 @@ const parse = (): Screen => {
   if (h === 'story') return { s: 'story' }
   if (h === 'explore') return { s: 'history', start: 'explore' }
   if (h.startsWith('ops')) return { s: 'history', start: 'ops', incident: h.split('/')[1] ?? null }
-  return { s: 'home' }
+  // The glacier-collapse story is the clearest first-time pitch: it starts at
+  // the source, shows the gauges going offline, and ends at India. Keep the
+  // live home dashboard available at #home, but make the story the default.
+  return { s: 'story' }
 }
 const hashOf = (x: Screen) => (x.s === 'home' ? '' : x.s === 'rivers' ? 'rivers' : x.s === 'live' ? x.mode : x.s === 'validate' ? 'validate' : x.s === 'story' ? 'story' : x.start === 'ops' ? `ops${x.incident ? '/' + x.incident : ''}` : x.start)
 

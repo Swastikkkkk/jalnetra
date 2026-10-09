@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import process from 'node:process'
 
 type RadarDetection = {
   incident_type?: 'river_flood' | 'waterlogging' | 'pothole' | 'leak'
