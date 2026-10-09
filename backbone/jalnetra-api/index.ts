@@ -17,17 +17,25 @@ const SEVERITY = ["low", "medium", "high"];
 const SOURCES = ["satellite", "forecast", "cctv", "dashcam", "app", "whatsapp", "sms", "call", "sensor"];
 const SLA_HOURS: Record<string, number> = { high: 6, medium: 24, low: 72 };
 // incident lifecycle: which status can follow which
+// civic issues: detected > approved > ticketed > fixed_claimed > verified
+// river floods:  detected > analyzing > alert_created > approved > contacted > evacuating > resolved > verified
 const NEXT: Record<string, string[]> = {
-  detected: ["approved", "rejected"],
-  approved: ["ticketed", "rejected"],
+  detected: ["analyzing", "alert_created", "approved", "rejected"],
+  analyzing: ["alert_created", "rejected"],
+  alert_created: ["approved", "rejected", "escalated"],
+  approved: ["contacted", "ticketed", "rejected", "escalated"],
+  contacted: ["evacuating", "resolved", "escalated"],
+  evacuating: ["resolved", "escalated"],
+  resolved: ["verified", "reopened"],
   ticketed: ["fixed_claimed", "escalated"],
   fixed_claimed: ["verified", "reopened"],
-  reopened: ["ticketed", "escalated"],
-  escalated: ["ticketed", "fixed_claimed"],
+  reopened: ["ticketed", "alert_created", "escalated"],
+  escalated: ["approved", "contacted", "evacuating", "resolved", "ticketed", "fixed_claimed"],
   rejected: [],
   verified: [],
 };
-const OPEN = ["detected", "approved", "ticketed", "reopened", "escalated", "fixed_claimed"];
+const OPEN = ["detected", "analyzing", "alert_created", "approved", "contacted", "evacuating", "ticketed", "reopened", "escalated", "fixed_claimed"];
+const WAITING = ["fixed_claimed", "evacuating"]; // someone is acting; the deadline does not flag these as overdue
 
 async function sha256(s: string) {
   const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
@@ -38,7 +46,36 @@ function metres(a: { lat: number; lng: number }, b: { lat: number; lng: number }
   const h = Math.sin(dl / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dn / 2) ** 2;
   return 12742000 * Math.asin(Math.sqrt(h));
 }
-const withFlags = (i: Record<string, any>) => ({ ...i, overdue: !!i.sla_due && OPEN.includes(i.status) && i.status !== "fixed_claimed" && new Date(i.sla_due) < new Date() });
+// pull call outcomes (status, transcript, questions asked) from OmniDimension for calls still in progress
+async function syncCalls(incidentId: string) {
+  const { data: pend } = await db.from("jn_alerts").select("id, provider_ref, call_status").eq("incident_id", incidentId).eq("channel", "call").not("provider_ref", "is", null);
+  const open = (pend ?? []).filter((a) => !["completed", "no-answer", "busy", "failed", "cancelled", "voicemail"].includes(a.call_status ?? ""));
+  if (!open.length) return;
+  const { data: cfg } = await db.from("jn_config").select("key, value").in("key", ["omnidim_key", "omnidim_agent"]);
+  const c = Object.fromEntries((cfg ?? []).map((r) => [r.key, r.value]));
+  if (!c.omnidim_key) return;
+  const r = await fetch(`https://omnidim.io/api/v1/calls/logs?agentid=${c.omnidim_agent}&pagesize=50`, { headers: { Authorization: `Bearer ${c.omnidim_key}` } });
+  if (!r.ok) return;
+  const logs = (await r.json()).call_log_data ?? [];
+  for (const a of open) {
+    const log = logs.find((l: any) => String(l.call_request_id?.id ?? l.call_request_id ?? "") === a.provider_ref || String(l.call_request_id).includes(`'id': ${a.provider_ref}`));
+    if (!log) continue;
+    await db.from("jn_alerts").update(callFields(log)).eq("id", a.id);
+  }
+}
+function callFields(log: any) {
+  let ev = log.extracted_variables ?? {};
+  if (typeof ev === "string") { try { ev = JSON.parse(ev.replace(/'/g, '"')); } catch { ev = {}; } }
+  const conv = String(log.call_conversation ?? log.fullConversation ?? "").replace(/<br\/?>/g, "\n").replace(/\n{2,}/g, "\n").trim();
+  const userLines = conv.split("\n").filter((l) => /^\s*user:/i.test(l)).map((l) => l.replace(/^\s*user:\s*/i, "").trim()).filter(Boolean);
+  const qs = Array.isArray(ev.questions_asked) ? ev.questions_asked : ev.questions_asked ? [String(ev.questions_asked)] : userLines.filter((l) => /\?|कहाँ|कब|कौन|क्या|कैसे/.test(l));
+  return {
+    call_status: String(log.call_status ?? log.status ?? "unknown"), summary: typeof log.sentiment_analysis_details === "string" && log.sentiment_analysis_details !== "False" ? log.sentiment_analysis_details : (log.summary ?? null),
+    transcript: conv || null, questions: qs, outcome: ev.outcome ?? ev.evacuation_agreed ?? null, call_payload: log, updated_at: new Date().toISOString(),
+  };
+}
+
+const withFlags = (i: Record<string, any>) => ({ ...i, overdue: !!i.sla_due && OPEN.includes(i.status) && !WAITING.includes(i.status) && new Date(i.sla_due) < new Date() });
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
@@ -46,29 +83,21 @@ Deno.serve(async (req) => {
   const path = url.pathname.replace(/^.*\/jalnetra-api/, "") || "/";
   if (path === "/health") return json({ ok: true, time: new Date().toISOString() });
 
+  // POST /hooks/omnidim?token=... -> OmniDimension post-call webhook (no team key; shared token instead)
+  if (path === "/hooks/omnidim" && req.method === "POST") {
+    const { data: tk } = await db.from("jn_config").select("value").eq("key", "webhook_token").maybeSingle();
+    if (!tk || url.searchParams.get("token") !== tk.value) return json({ error: "bad token" }, 401);
+    const p: any = await req.json().catch(() => ({}));
+    const reqId = String(p.call_request_id?.id ?? p.call_request_id ?? p.requestId ?? p.call_report?.call_request_id ?? "");
+    const body = p.call_report ?? p;
+    if (reqId) await db.from("jn_alerts").update(callFields({ ...body, extracted_variables: body.extracted_variables ?? p.extracted_variables, call_conversation: body.call_conversation ?? body.fullConversation ?? p.fullConversation })).eq("provider_ref", reqId);
+    return json({ ok: true });
+  }
+
   const key = req.headers.get("x-jalnetra-key");
   if (!key) return json({ error: "Missing x-jalnetra-key header" }, 401);
   const { data: who } = await db.from("jn_api_keys").select("owner, role").eq("key_hash", await sha256(key)).maybeSingle();
   if (!who) return json({ error: "Unknown API key" }, 401);
-
-  // GET /alert-candidates -> forecast/modelled warnings awaiting operator review
-  if (req.method === "GET" && path === "/alert-candidates") {
-    const status = url.searchParams.get("status") ?? "pending";
-    const { data, error } = await db.from("jn_alert_candidates").select("*").eq("status", status).order("created_at", { ascending: false }).limit(200);
-    if (error) return json({ error: error.message }, 500);
-    return json({ candidates: data ?? [] });
-  }
-  const candidate = path.match(/^\/alert-candidates\/([0-9a-f-]{36})$/);
-  if (candidate && req.method === "PATCH") {
-    if (who.role !== "operator") return json({ error: "Only operator keys can review alert candidates" }, 403);
-    let b: any;
-    try { b = await req.json(); } catch { return json({ error: "Body must be JSON" }, 400); }
-    if (!["approved", "dismissed", "expired"].includes(b.status)) return json({ error: "status must be approved, dismissed, or expired" }, 400);
-    const { data, error } = await db.from("jn_alert_candidates").update({ status: b.status, reviewed_by: who.owner, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", candidate[1]).select().maybeSingle();
-    if (error) return json({ error: error.message }, 500);
-    if (!data) return json({ error: "Alert candidate not found" }, 404);
-    return json({ candidate: data });
-  }
 
   // POST /incidents : create, or merge into a matching open incident nearby
   if (req.method === "POST" && path === "/incidents") {
@@ -92,8 +121,9 @@ Deno.serve(async (req) => {
       const sev = SEVERITY.indexOf(b.severity) > SEVERITY.indexOf(dup.severity) ? b.severity : dup.severity;
       const tighter = new Date(Date.now() + SLA_HOURS[sev] * 3600e3).toISOString();
       const sla = dup.sla_due && dup.sla_due < tighter ? dup.sla_due : tighter;
-      const { data: upd } = await db.from("jn_incidents").update({ reports: dup.reports + 1, confidence: conf, severity: sev, sla_due: sla, updated_at: new Date().toISOString() }).eq("id", dup.id).select().single();
-      await db.from("jn_events").insert({ incident_id: dup.id, action: "duplicate_report", actor: who.owner, note: `Another report from ${b.source}`, data: { evidence_url: b.evidence_url ?? null } });
+      const details = b.details?.prediction ? { ...dup.details, ...b.details } : dup.details;
+      const { data: upd } = await db.from("jn_incidents").update({ reports: dup.reports + 1, confidence: conf, severity: sev, sla_due: sla, details, updated_at: new Date().toISOString() }).eq("id", dup.id).select().single();
+      await db.from("jn_events").insert({ incident_id: dup.id, action: b.details?.prediction ? "prediction_update" : "duplicate_report", actor: who.owner, note: b.details?.prediction ? (b.title ?? "Prediction updated") : `Another report from ${b.source}`, data: { evidence_url: b.evidence_url ?? null, prediction: b.details?.prediction ?? null } });
       return json({ merged: true, incident: withFlags(upd) }, 200);
     }
     const row = {
@@ -101,10 +131,13 @@ Deno.serve(async (req) => {
       observed_at: b.observed_at ?? new Date().toISOString(), source: b.source, language: b.language ?? "hi", title: b.title ?? null,
       evidence_url: b.evidence_url ?? null, details: b.details ?? {}, reported_by: who.owner,
       sla_due: new Date(Date.now() + SLA_HOURS[b.severity] * 3600e3).toISOString(),
+      // predictions enter the flood lifecycle as an alert waiting for an operator; they are never called automatically
+      status: b.source === "forecast" && ["analyzing", "alert_created"].includes(b.status) ? b.status : "detected",
     };
     const { data: ins, error } = await db.from("jn_incidents").insert(row).select().single();
     if (error) return json({ error: error.message }, 500);
     await db.from("jn_events").insert({ incident_id: ins.id, action: "detected", actor: who.owner, note: b.title ?? null, data: { source: b.source } });
+    if (ins.status !== "detected") await db.from("jn_events").insert({ incident_id: ins.id, action: ins.status, actor: who.owner, note: b.details?.prediction?.why ?? "Model flagged high risk; waiting for operator approval", data: { prediction: b.details?.prediction ?? null } });
     return json({ merged: false, incident: withFlags(ins) }, 201);
   }
 
@@ -183,6 +216,7 @@ Deno.serve(async (req) => {
   // POST /incidents/:id/alerts {contact_ids, message, channel} (operator) -> Hindi voice call or SMS through Twilio when configured
   const al = path.match(/^\/incidents\/([0-9a-f-]{36})\/alerts$/);
   if (al && req.method === "GET") {
+    await syncCalls(al[1]).catch(() => {});
     const { data } = await db.from("jn_alerts").select("*, jn_contacts(name, role, phone, place_name)").eq("incident_id", al[1]).order("created_at", { ascending: false });
     return json({ alerts: data ?? [] });
   }
@@ -193,7 +227,7 @@ Deno.serve(async (req) => {
     const channel = b.channel === "sms" ? "sms" : "call";
     if ((!Array.isArray(b.contact_ids) || !b.contact_ids.length) && !b.demo) return json({ error: "Pick at least one contact" }, 400);
     if (!b.message) return json({ error: "message is required" }, 400);
-    const { data: inc } = await db.from("jn_incidents").select("id").eq("id", al[1]).maybeSingle();
+    const { data: inc } = await db.from("jn_incidents").select("id, status, incident_type").eq("id", al[1]).maybeSingle();
     if (!inc) return json({ error: "Incident not found" }, 404);
     const { data: contacts } = b.contact_ids?.length ? await db.from("jn_contacts").select("*").in("id", b.contact_ids) : { data: [] as any[] };
     const { data: cfg } = await db.from("jn_config").select("key, value");
@@ -214,7 +248,11 @@ Deno.serve(async (req) => {
             method: "POST", headers: { Authorization: `Bearer ${c.omnidim_key}`, "Content-Type": "application/json" },
             body: JSON.stringify({
               agent_id: Number(c.omnidim_agent), to_number: ct.phone, ...(c.omnidim_from ? { from_number_id: Number(c.omnidim_from) } : {}),
-              call_context: { alert_message: b.message, place: b.context?.place ?? "", incident_title: b.context?.title ?? "", source: b.context?.source ?? "", observed: b.context?.observed ?? "", safe_place: b.context?.safe_place ?? "not available" },
+              call_context: {
+                alert_message: b.message, place: b.context?.place ?? "", incident_title: b.context?.title ?? "", source: b.context?.source ?? "", observed: b.context?.observed ?? "",
+                safe_place: b.context?.safe_place ?? "not available", village: b.context?.village ?? b.context?.place ?? "", risk: b.context?.risk ?? "not stated",
+                impact_time: b.context?.impact_time ?? "not stated", route: b.context?.route ?? "not available", model_updated: b.context?.model_updated ?? "", simulated: b.context?.simulated ? "yes" : "no",
+              },
               metadata: { incident_id: inc.id, contact_id: ct.id },
             }),
           });
@@ -229,11 +267,28 @@ Deno.serve(async (req) => {
           if (r.ok) { status = "sent"; ref = j.sid ?? null } else { status = "failed"; err = j.message ?? `Twilio error ${r.status}` }
         }
       } catch (e) { status = "failed"; err = String(e) }
-      await db.from("jn_alerts").insert({ incident_id: inc.id, contact_id: ct.id, channel, message: b.message, status, provider_ref: ref, error: err, sent_by: who.owner });
+      await db.from("jn_alerts").insert({ incident_id: inc.id, contact_id: ct.id, channel, message: b.message, status, provider_ref: ref, error: err, sent_by: who.owner, context: b.context ?? null, call_status: status === "sent" ? "dispatched" : null });
       results.push({ contact: ct.name, phone: ct.phone, status, error: err });
     }
     await db.from("jn_events").insert({ incident_id: inc.id, action: "alert", actor: who.owner, note: `${channel === "call" ? "Voice call" : "SMS"} to ${results.length} contact(s): ${results.filter((r) => r.status === "sent").length} sent`, data: { results } });
-    return json({ telephony: provider, results });
+    let status = inc.status;
+    if (inc.incident_type === "river_flood" && inc.status === "approved" && results.some((r) => r.status === "sent")) {
+      await db.from("jn_incidents").update({ status: "contacted", updated_at: new Date().toISOString() }).eq("id", inc.id);
+      await db.from("jn_events").insert({ incident_id: inc.id, action: "contacted", actor: who.owner, note: `Hindi ${channel === "call" ? "AI voice call" : "SMS"} placed` });
+      status = "contacted";
+    }
+    return json({ telephony: provider, results, status });
+  }
+
+  // GET /model/latest?mode=live -> the most recent run of the monitoring worker
+  if (path === "/model/latest" && req.method === "GET") {
+    const { data } = await db.from("jn_model_runs").select("*").eq("mode", url.searchParams.get("mode") ?? "live").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    return json({ run: data ?? null });
+  }
+  // GET /model/runs -> recent runs, summary only
+  if (path === "/model/runs" && req.method === "GET") {
+    const { data } = await db.from("jn_model_runs").select("id, created_at, mode, issued_for, overall, river, rain_level, at_risk, alerts_created, error").order("created_at", { ascending: false }).limit(50);
+    return json({ runs: data ?? [] });
   }
 
   return json({ error: `No route for ${req.method} ${path}` }, 404);

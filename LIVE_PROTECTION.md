@@ -94,8 +94,14 @@ Tier 1 exports can also be uploaded to the private Supabase Storage bucket
 `jalnetra-tier1`. The live-protection function reads
 `village_sentinel1_evidence.geojson` from that bucket and uses only features
 explicitly marked `affected` as observed satellite evidence. The remaining
-GeoJSON/TIFF exports are retained as source artifacts until their map/API
-representations are configured.
+GeoJSON/TIFF exports are retained as source artifacts. The deployed
+`tier1-map` Edge Function exposes one-hour signed URLs for the four approved
+GeoJSON map layers (`flood`, `admin1`, `admin2`, and `villages`) without making
+the bucket public. The frontend renders the Sentinel-1 flood polygons as
+observed evidence and the administrative boundaries as geographic reference.
+The full DEM/slope TIFF remains in Drive because it exceeds the Supabase object
+limit; `copernicus_dem_slope_overview.tif` is the compressed overview artifact
+stored in Supabase for future terrain display/API summaries.
 
 The existing authenticated incident API now exposes the review workflow:
 

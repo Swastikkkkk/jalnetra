@@ -83,3 +83,28 @@ Adds proof to the incident's history without changing its status. The flood part
   - `demo: true` also calls `jn_config.alert_phone`, so you can demo with zero contacts.
   - SMS (and calls when OmniDimension is not set) fall back to Twilio (`twilio_sid`, `twilio_token`, `twilio_from`). With neither, alerts are logged as `not_configured`.
 - `GET /incidents/{id}/alerts` lists what was sent and what failed.
+
+
+## Live prediction (v2026.10)
+
+### Lifecycle for river floods
+`detected > analyzing > alert_created > approved > contacted > evacuating > resolved > verified` (plus `rejected`, `reopened`, `escalated`).
+Civic issues (potholes, waterlogging, leaks) keep `detected > approved > ticketed > fixed_claimed > verified`.
+- `POST /incidents` with `"source": "forecast", "status": "alert_created"` creates a prediction alert that waits for an operator. Nothing is called automatically.
+- A successful call on an `approved` flood incident moves it to `contacted` automatically.
+
+### Model runs
+- `GET /model/latest?mode=live` latest run of the monitoring worker (overall risk, river trend, counts per horizon, flagged villages with factors).
+- `GET /model/runs` last 50 runs (summary).
+- Worker: Supabase function `jalnetra-monitor`, called every 15 min by pg_cron (`x-cron-token` header). It fetches GloFAS + Open-Meteo, runs `engine/core.ts` (same file as the website), stores the run in `jn_model_runs`, every input in `jn_env_observations` (ts, lat, lng, source, type, value, unit, confidence, forecast), and opens `alert_created` incidents for HIGH/CRITICAL villages. AWS later: EventBridge rule + Lambda, model.json in S3.
+
+### Calls
+- `POST /incidents/{id}/alerts` accepts `context: { village, risk, impact_time, safe_place, route, model_updated, simulated, ... }`. The OmniDimension agent answers questions ("हमें कहाँ जाना चाहिए?", "बाढ़ कब तक आ सकती है?", "कौन सा रास्ता सुरक्षित है?") only from these facts.
+- After the call: `jn_alerts.call_status`, `summary`, `transcript`, `questions`, `outcome` are filled by the OmniDimension post-call webhook (`POST /hooks/omnidim?token=...`) and by a sync on `GET /incidents/{id}/alerts`.
+
+### The model (transparent, replaceable)
+- `src/engine/core.ts`: river forecast per station = damped trend + water arriving from upstream (6.78 km/h, fitted to 2026 peak timing) + rain response (15 m3/s per mm, peak 36 h later) blended with the GloFAS forecast when live. Horizons +3/+6/+12/+24 h with a confidence band.
+- Village flood probability: logistic model on ln(72 h max flow / 4000), lowest ground within 500 m, village height, distance to channel. Fitted to which villages Sentinel-1 saw flooded on 26 Sep, 29 Sep, 3 Oct 2026 (`predict/calib3.py`). Leave-one-date-out coefficients are stored for validation.
+- Flood extent: pixel logistic model on the same flow plus height above channel and distance (`predict/calib5.py`), shown where probability >= 15%.
+- Risk score 0-100 = probability 45 + time to impact 15 + low ground 10 + near river 10 + river rising 10 + rain 10. CRITICAL needs probability >= 50%, score >= 65 and impact <= 12 h.
+- Depth is not estimated (no stage gauge or hydraulic model). Population is not estimated (no data loaded).

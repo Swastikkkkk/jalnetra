@@ -25,3 +25,4 @@ dist-ssr
 .env
 TEAM_KEYS.txt
 supabase/.temp/
+.vercel
