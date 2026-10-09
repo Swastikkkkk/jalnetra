@@ -49,6 +49,7 @@ export default function Live({ mode, onHome, onValidate, onOpenIncident, onMode 
   const [events, setEvents] = useState<{ t: number; text: string; kind: 'info' | 'warn' | 'crit' | 'ok' }[]>([])
   const [layers, setLayers] = useState({ sat: true, predicted: true, observed: mode === 'demo', villages: true, roads: false, shelters: true, route: true, rain: true, rivers: true })
   const [showLayers, setShowLayers] = useState(false)
+  const [detail, setDetail] = useState(false)
   const [running, setRunning] = useState(false)
   const prev = useRef<ModelRun | null>(null)
   const pipeRef = useRef<HTMLDivElement>(null)
@@ -200,10 +201,10 @@ export default function Live({ mode, onHome, onValidate, onOpenIncident, onMode 
         <div className={'modebadge ' + mode}>{mode === 'live' ? <><i className="dot" />LIVE</> : <><i className="dot" />LIVE DEMO SIMULATION</>}</div>
         {run && <>
           <Stat k="River" v={run.river.toUpperCase()} tone={run.river.startsWith('Rising') ? 'warn' : 'ok'} />
-          <Stat k="Rain" v={run.rainMissing ? 'NO DATA' : run.rainLevel} tone={run.rainLevel === 'HIGH' ? 'warn' : 'ok'} />
-          <Stat k="Overall risk" v={run.overall} tone={run.overall === 'LOW' ? 'ok' : run.overall === 'MEDIUM' ? 'mid' : 'warn'} />
+          {detail && <Stat k="Rain" v={run.rainMissing ? 'NO DATA' : run.rainLevel} tone={run.rainLevel === 'HIGH' ? 'warn' : 'ok'} />}
+          {detail && <Stat k="Overall risk" v={run.overall} tone={run.overall === 'LOW' ? 'ok' : run.overall === 'MEDIUM' ? 'mid' : 'warn'} />}
           <Stat k={`Villages at risk ${HLABEL[h]}`} v={<><Count n={atRiskH} /> <span className="dim">/ 291</span></>} tone={atRiskH ? 'warn' : 'ok'} />
-          <div className="lb-levels"><span className="lv CRITICAL">{counts.CRITICAL} critical</span><span className="lv HIGH">{counts.HIGH} high</span><span className="lv MEDIUM">{counts.MEDIUM} medium</span></div>
+          {detail && <div className="lb-levels"><span className="lv CRITICAL">{counts.CRITICAL} critical</span><span className="lv HIGH">{counts.HIGH} high</span><span className="lv MEDIUM">{counts.MEDIUM} medium</span></div>}
         </>}
         <div className="lb-time">
           <div><span className="dim">LAST UPDATED</span> {lastAt ? fmtIST(lastAt, false) + ':' + String(new Date(lastAt).getSeconds()).padStart(2, '0') : '...'}</div>
@@ -212,12 +213,13 @@ export default function Live({ mode, onHome, onValidate, onOpenIncident, onMode 
         </div>
         <div className="lb-btns">
           <div className="seg"><button className={mode === 'live' ? 'on' : ''} onClick={() => onMode('live')}>Live</button><button className={mode === 'demo' ? 'on' : ''} onClick={() => onMode('demo')}>Demo</button></div>
+          <button className="storybtn" onClick={() => setDetail(d => !d)}>{detail ? 'Simple view' : 'Show details'}</button>
           <button className="storybtn" onClick={onValidate}>2026 validation</button>
         </div>
       </header>
 
       {/* ---------- pipeline ---------- */}
-      <div className="pipe" ref={pipeRef} aria-label="Prediction pipeline">
+      {detail && <div className="pipe" ref={pipeRef} aria-label="Prediction pipeline">
         {STAGES.map((s, i) => {
           const val = !run ? '' : [
             `${run.inputs.observations} obs`, run.river, `+24h ${fmtQ(run.stations[run.stations.length - 1].q[96])}`, `${extents?.[h].km2 ?? '…'} km²`, `${atRiskH} villages`,
@@ -226,14 +228,14 @@ export default function Live({ mode, onHome, onValidate, onOpenIncident, onMode 
           const on = i < 7 ? !!run : i === 7 ? queue.length > 0 : i === 8 ? anyApproved : anyContacted || anyIncident
           return <div key={s} className={'stage' + (i < 7 ? ' model' : ' human') + (on ? ' on' : '') + (i === 7 ? ' gate' : '')}><span className="sn">{i + 1}</span><span className="st">{s}</span><span className="sv">{val}</span></div>
         })}
-      </div>
+      </div>}
       </div>
 
       {err && <div className="lerr"><FiAlertTriangle /> {err} {mode === 'live' && <button onClick={() => onMode('demo')}>Run the demo simulation</button>}</div>}
       {!run && !err && <div className="lerr info"><FiRefreshCw className="spin" /> Fetching river and rain data, running the model…</div>}
 
       {/* ---------- left: forecast + inputs + impact timeline ---------- */}
-      {run && <aside className="lpanel left">
+      {run && detail && <aside className="lpanel left">
         <Forecast run={run} />
         <ImpactTimeline run={run} onPick={pick} sel={sel} />
         <section>
@@ -254,7 +256,7 @@ export default function Live({ mode, onHome, onValidate, onOpenIncident, onMode 
       {run && <aside className="lpanel right">
         {selR ? <VillagePanel r={selR} route={routes.get(selR.id) ?? null} run={run} mode={mode} h={h} st={alerts[selR.id]} setSt={s => setAlerts(a => ({ ...a, [selR.id]: { ...(a[selR.id] ?? {}), ...s } as AlertState }))} onClose={() => setSel(null)} onOpenIncident={onOpenIncident} />
           : <AlertQueue queue={queue} alerts={alerts} onView={pick} onDismiss={id => setAlerts(a => ({ ...a, [id]: { stage: 'dismissed' } }))} onOpenIncident={onOpenIncident} mode={mode} />}
-        {stats && <section>
+        {stats && detail && <section>
           <div className="kicker">Potentially affected at {HLABEL[h]}</div>
           <dl className="kv small">
             <dt>Flood area</dt><dd>{extents![h].km2.toLocaleString()} km² predicted water</dd>
@@ -283,7 +285,7 @@ export default function Live({ mode, onHome, onValidate, onOpenIncident, onMode 
           {mode === 'live' && <button onClick={runNow} disabled={running}><FiRefreshCw className={running ? 'spin' : ''} /> Run model now</button>}
           <button onClick={() => setShowLayers(s => !s)}><FiLayers /> Layers</button>
         </div>
-        <ol className="feed">{events.slice(0, 4).map((e, i) => <li key={i} className={e.kind}><span className="dim">{fmtIST(e.t, mode === 'demo')}</span> {e.text}</li>)}</ol>
+        <ol className={'feed' + (detail ? '' : ' hide')}>{events.slice(0, 4).map((e, i) => <li key={i} className={e.kind}><span className="dim">{fmtIST(e.t, mode === 'demo')}</span> {e.text}</li>)}</ol>
       </footer>
       {showLayers && <div className="lpop">
         {([['predicted', mode === 'demo' ? 'Simulated prediction' : 'Predicted flood'], ['observed', mode === 'demo' ? 'Observed flood (Sentinel-1, 2026)' : 'Last radar flood map (3 Oct)'], ['villages', 'Village risk'], ['route', 'Evacuation route'], ['shelters', 'Schools, hospitals'], ['roads', 'Roads'], ['rain', 'Rainfall (48 h)'], ['rivers', 'Rivers'], ['sat', 'Satellite imagery']] as const).map(([k, l]) => <label key={k} className="tg"><input type="checkbox" checked={layers[k]} onChange={() => tick(k)} /><span>{l}</span></label>)}
@@ -396,7 +398,7 @@ function AlertQueue({ queue, alerts, onView, onDismiss, onOpenIncident, mode }: 
 
 function VillagePanel({ r, route, run, mode, h, st, setSt, onClose, onOpenIncident }: { r: VillageRisk; route: Route | null; run: ModelRun; mode: Mode; h: number; st?: AlertState; setSt: (s: Partial<AlertState>) => void; onClose: () => void; onOpenIncident: (id: string) => void }) {
   const v = VBY.get(r.id)!
-  const [why, setWhy] = useState(true)
+  const [why, setWhy] = useState(false)
   const [review, setReview] = useState(false)
   const [msg, setMsg] = useState(() => hindiAlert(v.name, r, route, mode === 'demo'))
   const [demoPhone, setDemoPhone] = useState(true)
