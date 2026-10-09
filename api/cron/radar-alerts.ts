@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 type RadarDetection = {
   incident_type?: 'river_flood' | 'waterlogging' | 'pothole' | 'leak'
   severity: 'low' | 'medium' | 'high'
@@ -48,18 +50,21 @@ export default async function handler(req: Request) {
     const created = await incidentResponse.json() as IncidentResponse
     const result: { title: string; incidentId?: string; merged?: boolean; alert?: unknown } = { title: detection.title, incidentId: created.incident.id, merged: created.merged }
     if (!created.merged) {
-      const alert = await fetch(`${api}/incidents/${created.incident.id}/alerts`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          contact_ids: contactIds,
-          demo: contactIds.length === 0,
-          channel: 'call',
-          message: `नमस्ते। जलनेत्र की बाढ़ चेतावनी। ${detection.title}। कृपया ऊँची सुरक्षित जगह पर जाएँ और पंचायत को सूचित करें।`,
-          context: { place: detection.title, title: detection.title, source: 'Sentinel-1 radar', observed: detection.observed_at ?? new Date().toISOString(), safe_place: 'nearest school or panchayat building on high ground' },
-        }),
-      })
-      result.alert = await alert.json().catch(() => ({ status: alert.status }))
+      if (contactIds.length === 0) {
+        result.alert = { status: 'not_sent', reason: 'No approved alert contacts configured' }
+      } else {
+        const alert = await fetch(`${api}/incidents/${created.incident.id}/alerts`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            contact_ids: contactIds,
+            channel: 'call',
+            message: `नमस्ते। जलनेत्र की बाढ़ चेतावनी। ${detection.title}। कृपया ऊँची सुरक्षित जगह पर जाएँ और पंचायत को सूचित करें।`,
+            context: { place: detection.title, title: detection.title, source: 'Sentinel-1 radar', observed: detection.observed_at ?? new Date().toISOString(), safe_place: 'nearest school or panchayat building on high ground' },
+          }),
+        })
+        result.alert = await alert.json().catch(() => ({ status: alert.status }))
+      }
     }
     results.push(result)
   }
