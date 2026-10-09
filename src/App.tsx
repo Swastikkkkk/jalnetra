@@ -12,9 +12,11 @@ import o2 from './img/o2.png'
 import o3 from './img/o3.png'
 import corridorImg from './img/corridor.png'
 import normalImg from './img/normal.png'
-import countries from './countries.json'
+import indiaBoundary from './india-boundary.json'
 import OpsPanel, { useIncidents } from './OpsPanel'
-import { alertContext, hasKey, sendAlerts, type Incident } from './ops'
+import { type Incident } from './ops'
+import { Spotlight } from './components/ui/spotlight'
+import { BentoGrid, BentoGridItem } from './components/ui/bento-grid'
 
 type V = (typeof D.villages)[number]
 type State = 'affected' | 'atrisk' | 'watch' | 'safe'
@@ -145,6 +147,12 @@ const STEPS: Step[] = [
 const INITIAL: MapViewState = { longitude: 84.45, latitude: 26.85, zoom: 7.7, pitch: 0, bearing: 0, minZoom: 6.2, maxZoom: 11.5 }
 
 export default function App() {
+  // The old deployment exposed a `#demo` hash that opened the long replay
+  // screen. This app has one intentional entry point now: the short landing
+  // flow. Remove stale hashes when someone follows an old shared URL.
+  useEffect(() => {
+    if (window.location.hash) window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+  }, [])
   const [view, setView] = useState<MapViewState>(INITIAL)
   const [t, setT] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -158,7 +166,6 @@ export default function App() {
   const [anim, setAnim] = useState(0)
   const [phase, setPhase] = useState<'landing' | 'story' | 'explore' | 'ops'>('landing')
   const inc = useIncidents()
-  const [storyCall, setStoryCall] = useState<string | null>(null)
   const [opsSel, setOpsSel] = useState<string | null>(null)
   const [step, setStep] = useState(0)
   const [normalOn, setNormalOn] = useState(false)
@@ -229,30 +236,11 @@ export default function App() {
     if (s.select) setSel(D.villages.find(v => v.id === s.select) ?? null)
     if (s.play) { playTo.current = s.play.to; setT(s.play.from); setFollow(true); lastFollow.current = -1; setTimeout(() => setPlaying(true), 1200) }
   }
-  const callStoryVillage = async (v: V) => {
-    if (!hasKey()) {
-      setStoryCall('Connect the operator dashboard first, then return here to place the call.')
-      setPhase('ops')
-      return
-    }
-    const incident = inc.items.find(i => i.incident_type === 'river_flood' && (i.details?.villages ?? []).includes(v.name))
-    if (!incident) {
-      setStoryCall(`No shared API incident is linked to ${v.name} yet.`)
-      return
-    }
-    setStoryCall('Placing the Hindi call to the configured demo phone…')
-    try {
-      const result = await sendAlerts(incident.id, [], `नमस्ते। ${v.name} के लोगों के लिए जलनेत्र की बाढ़ चेतावनी। कृपया ऊँची सुरक्षित जगह पर जाएँ और पंचायत को सूचित करें।`, 'call', { demo: true, context: alertContext(incident) })
-      const sent = result.results.some(r => r.status === 'sent')
-      setStoryCall(sent ? 'Hindi call placed to the configured demo phone.' : 'The call was logged, but no phone provider accepted it.')
-    } catch (e) {
-      setStoryCall((e as Error).message)
-    }
-  }
   const selectInc = (i: Incident | null) => { setOpsSel(i?.id ?? null); if (i) fly({ longitude: i.lng, latitude: i.lat, zoom: Math.max(view.zoom ?? 8, 9.5) }) }
   const openOps = () => { setPhase('ops'); setSel(null); setReach(null); setPlaying(false); setFollow(false); fly({ ...fit(0) }) }
   const startStory = () => { setPhase('story'); applyStep(0) }
   const explore = () => { setPhase('explore'); setStep(0); setLayers({ observed: true, route: true, corridor: true, villages: true, roads: false, shelters: false }); setNormalOn(false); setMode('active'); setT(OBS[1].day + 0.01); fly({ ...fit(0) }) }
+  const openCurrent = () => { setPhase('explore'); setStep(0); setLayers({ observed: true, route: true, corridor: true, villages: true, roads: false, shelters: false }); setNormalOn(false); setMode('today'); setPlaying(false); setFollow(false); setT(DAYS - 1); fly({ ...fit(0) }) }
   const states = useMemo(() => new Map(D.villages.map(v => [v.id, villageState(v, mode, obsIdx)])), [mode, obsIdx])
   const counts = useMemo(() => { const c: Record<State, number> = { affected: 0, atrisk: 0, watch: 0, safe: 0 }; states.forEach(s => c[s]++); return c }, [states])
 
@@ -273,7 +261,8 @@ export default function App() {
 
   const tq = Math.round(t * 20)
   const L: any[] = []
-  L.push(new GeoJsonLayer({ id: 'countries', data: countries as any, filled: true, stroked: true, getFillColor: [16, 19, 24], getLineColor: [70, 78, 92], lineWidthMinPixels: 1 }))
+  // India-specific admin-1 boundaries provide the national shape and state context.
+  L.push(new GeoJsonLayer({ id: 'india-boundary', data: indiaBoundary as any, filled: false, stroked: true, getLineColor: [248, 250, 252, 210], lineWidthMinPixels: 2, lineWidthMaxPixels: 4 }))
   L.push(new PathLayer({ id: 'network-map', data: D.network, getPath: (d: any) => d, getColor: [70, 110, 150], widthMinPixels: 1 }))
   if (sat) L.push(new BitmapLayer({ id: 's2', image: s2, bounds: S2B }))
   if (normalOn) L.push(new BitmapLayer({ id: 'normal', image: normalImg, bounds: BOUNDS, opacity: 0.9 }))
@@ -328,7 +317,7 @@ export default function App() {
   }
 
   if (phase === 'ops') {
-    for (let k = L.length - 1; k >= 0; k--) if (!['countries', 'network-map', 's2', 'river-base', 'flow0', 'flow2000', 'labels', 'stations'].includes(L[k].id)) L.splice(k, 1)
+    for (let k = L.length - 1; k >= 0; k--) if (!['india-boundary', 'network-map', 's2', 'river-base', 'flow0', 'flow2000', 'labels', 'stations'].includes(L[k].id)) L.splice(k, 1)
     const SEV: Record<string, [number, number, number]> = { high: [248, 113, 113], medium: [245, 158, 11], low: [253, 224, 71] }
     L.push(new ScatterplotLayer({ id: 'incidents', data: inc.items, getPosition: (d: Incident) => [d.lng, d.lat], radiusUnits: 'pixels', getRadius: (d: Incident) => (d.id === opsSel ? 11 : 7),
       getFillColor: (d: Incident) => [...SEV[d.severity], ['verified', 'rejected'].includes(d.status) ? 90 : 240] as any, stroked: true, getLineColor: (d: Incident) => (d.id === opsSel ? [255, 255, 255] : [10, 12, 16]), lineWidthMinPixels: 1.5,
@@ -345,16 +334,39 @@ export default function App() {
 
       {phase === 'landing' && (
         <div className="landing">
-          <div className="lcard">
-            <div className="eyebrow">JalNetra · flood intelligence</div>
-            <h1>Watch a real flood travel from Nepal to Bihar</h1>
-            <p>In September 2026, heavy rain in Nepal sent a flood wave down the Gandak into Bihar. This map replays it with real satellite images, river data and radar flood maps, step by step.</p>
-            <div className="lbtns">
-              <button className="primary" onClick={startStory}>Start the story <FiArrowRight /></button>
-              <button onClick={explore}><FiMap /> Explore the map</button>
-              <button onClick={openOps}>Operator dashboard</button>
-            </div>
-            <div className="lsrc">Sentinel-1 and Sentinel-2 (ESA Copernicus) · GloFAS river model · Copernicus DEM · OpenStreetMap · GeoNames</div>
+           <Spotlight className="landing-spotlight" fill="#7dd3fc" />
+          <div className="lwrap">
+            <section className="lcard" aria-labelledby="landing-title">
+              <div className="eyebrow"><span className="status-dot" /> JalNetra · flood intelligence</div>
+              <div className="lbadge">NEPAL → INDIA FLOOD REPLAY · GANDAK CORRIDOR</div>
+              <h1 id="landing-title">Know where the flood is going <em>before it arrives.</em></h1>
+               <p className="lede">See the river now, or review how an upstream signal became a downstream warning.</p>
+               <div className="lbtns">
+                 <button className="primary" onClick={openCurrent}>Current river situation <FiArrowRight /></button>
+                 <button onClick={startStory}>Review Nepal → India event <FiArrowRight /></button>
+               </div>
+               <p className="safeguard">Warnings are broadcast only after operator approval.</p>
+               <div className="secondary-nav"><button className="link" onClick={explore}><FiMap /> Technical map</button><button className="link" onClick={openOps}>Operations</button></div>
+              <p className="lsrc">Replay evidence: Sentinel-1/2, GloFAS, Copernicus DEM and OpenStreetMap.</p>
+            </section>
+
+            <section className="lproof" aria-label="How JalNetra works">
+              <div className="proof-head"><span className="kicker">The operating loop</span><span className="proof-line" /></div>
+               <BentoGrid className="lsteps">
+                 <BentoGridItem title="Detect upstream" description="See rain build in Nepal and flow rise at the first river station." icon={<span className="step-no">01</span>} />
+                 <BentoGridItem title="Predict villages" description="Trace the wave into a terrain-informed risk corridor." icon={<span className="step-no">02</span>} />
+                 <BentoGridItem title="Broadcast the warning" description="Select nearby responders and approve a Hindi call or SMS." icon={<span className="step-no">03</span>} />
+               </BentoGrid>
+              <div className="validation">
+                 <div className="proof-head"><span className="kicker">Evidence from the replay</span><span className="proof-tag">REAL DATA</span></div>
+                <div className="metrics">
+                  <div><strong>{D.villages.length}</strong><span>villages tracked</span></div>
+                  <div><strong>{O2.km2.toLocaleString()} km²</strong><span>new water seen</span></div>
+                  <div><strong>{o2Counts.affected}</strong><span>villages affected</span></div>
+                </div>
+                 <p className="proof-note">Nepal-to-India flood replay · Sentinel-1 · {shortDate(O2.time)}. Affected means radar saw new water within 500 m of a village; these are observations, not a forecast accuracy score.</p>
+              </div>
+            </section>
           </div>
         </div>
       )}
@@ -368,9 +380,8 @@ export default function App() {
           {STEPS[step].chart !== undefined && <Spark q={st[STEPS[step].chart!].q} t={t} peakDay={st[STEPS[step].chart!].peakDay} />}
           {STEPS[step].legend && <Legend />}
           {STEPS[step].today && <TodayCard bare live={live} />}
-          {sel && STEPS[step].select && <VillageCard v={sel} state={states.get(sel.id)!} obs={curObs} onClose={() => setSel(null)} bare onCall={() => callStoryVillage(sel)} />}
-          {step === 6 && <button className="speak" onClick={() => callStoryVillage(SPOT)}><FiPhoneCall /> {storyCall ? 'Call again' : `Call ${SPOT.name}`}</button>}
-          {storyCall && step === 6 && <p className="note">{storyCall}</p>}
+           {sel && STEPS[step].select && <VillageCard v={sel} state={states.get(sel.id)!} obs={curObs} onClose={() => setSel(null)} bare />}
+           {step === 6 && <button className="speak" onClick={openOps}><FiPhoneCall /> Broadcast from operations</button>}
           <div className="sdate">{fmtDay(t)}{playing ? ' · playing' : ''}</div>
           <div className="snav">
             <button onClick={() => (step === 0 ? setPhase('landing') : applyStep(step - 1))}><FiArrowLeft /> Back</button>
@@ -387,7 +398,7 @@ export default function App() {
       <header className="top">
         <div className="brand">
           <div className="eyebrow">JalNetra · Gandak corridor, Nepal to Bihar</div>
-          <div className="title">September 2026 flood</div>
+          <div className="title">Current river situation</div>
         </div>
         <div className="seg" aria-label="Mode">
           <button className={mode === 'early' ? 'on' : ''} onClick={() => setMode('early')}>Early warning</button>

@@ -37,15 +37,15 @@ export const listIncidents = () => call<{ incidents: Incident[] }>('/incidents?l
 export const getIncident = (id: string) => call<{ incident: Incident; events: Event[] }>(`/incidents/${id}`)
 export const setStatus = (id: string, status: Status, note?: string) => call<{ incident: Incident }>(`/incidents/${id}`, { method: 'PATCH', body: JSON.stringify({ status, note }) })
 
-export type Contact = { id: string; name: string; role: 'sarpanch' | 'asha' | 'ngo' | 'official' | 'volunteer'; phone: string; place_name: string; district: string | null; lat: number; lng: number; km?: number }
+export type Contact = { id: string; name: string; role: 'sarpanch' | 'hospital' | 'asha' | 'ngo' | 'official' | 'volunteer'; phone: string; place_name: string; district: string | null; lat: number; lng: number; km?: number }
 export type Alert = { id: string; channel: 'call' | 'sms'; message: string; status: 'sent' | 'failed' | 'not_configured'; error: string | null; created_at: string; jn_contacts: { name: string; role: string; phone: string; place_name: string } | null }
-export const ROLE_LABEL = { sarpanch: 'Sarpanch', asha: 'ASHA worker', ngo: 'NGO', official: 'Official', volunteer: 'Volunteer' } as const
+export const ROLE_LABEL = { sarpanch: 'Sarpanch', hospital: 'Hospital', asha: 'ASHA worker', ngo: 'NGO', official: 'Official', volunteer: 'Local responder' } as const
 export const listContacts = (lat: number, lng: number, km = 20) => call<{ contacts: Contact[] }>(`/contacts?lat=${lat}&lng=${lng}&km=${km}`).then(r => r.contacts)
 export const addContact = (c: Omit<Contact, 'id' | 'km'>) => call<{ contact: Contact }>('/contacts', { method: 'POST', body: JSON.stringify(c) }).then(r => r.contact)
-export type Telephony = { call: 'omnidimension' | 'twilio' | 'not_configured'; demo_phone: string | null }
+export type Telephony = { call: 'omnidimension' | 'twilio' | 'not_configured' }
 export type AlertContext = { place: string; title: string; source: string; observed: string; safe_place: string }
 export const getTelephony = () => call<Telephony>('/telephony')
-export const sendAlerts = (id: string, contact_ids: string[], message: string, channel: 'call' | 'sms', opts: { demo?: boolean; context?: AlertContext } = {}) =>
+export const sendAlerts = (id: string, contact_ids: string[], message: string, channel: 'call' | 'sms', opts: { context?: AlertContext } = {}) =>
   call<{ telephony: Telephony['call']; results: { contact: string; phone: string; status: string; error: string | null }[] }>(`/incidents/${id}/alerts`, { method: 'POST', body: JSON.stringify({ contact_ids, message, channel, ...opts }) })
 export function alertContext(i: Incident): AlertContext {
   return {
