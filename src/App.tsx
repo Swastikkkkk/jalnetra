@@ -144,7 +144,7 @@ const STEPS: Step[] = [
 
 const INITIAL: MapViewState = { longitude: 84.45, latitude: 26.85, zoom: 7.7, pitch: 0, bearing: 0, minZoom: 6.2, maxZoom: 11.5 }
 
-export default function App({ start = 'story', incidentId = null, onHome, onValidate, onLive }: { start?: 'story' | 'explore' | 'ops'; incidentId?: string | null; onHome: () => void; onValidate: () => void; onLive: () => void }) {
+export default function App({ start = 'story', incidentId = null, onHome, onValidate, onLive, onStory }: { start?: 'story' | 'explore' | 'ops'; incidentId?: string | null; onHome: () => void; onValidate: () => void; onLive: () => void; onStory: () => void }) {
   const [view, setView] = useState<MapViewState>(INITIAL)
   const [t, setT] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -372,7 +372,7 @@ export default function App({ start = 'story', incidentId = null, onHome, onVali
           <button className={mode === 'today' ? 'on' : ''} onClick={() => { setMode('today'); setPlaying(false); setT(DAYS - 1) }}>Today</button>
         </div>
         <button className="storybtn" onClick={onHome}>Home</button>
-        <button className="storybtn" onClick={() => { location.hash = 'story' }}><FiRotateCcw /> Story</button>
+        <button className="storybtn" onClick={onStory}><FiRotateCcw /> Glacier story</button>
         <button className="storybtn" onClick={onValidate}>Validation</button>
         <button className="storybtn" onClick={onLive}>Live prediction</button>
         <button className="storybtn" onClick={openOps}>Operations</button>
