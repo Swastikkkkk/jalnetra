@@ -372,7 +372,7 @@ export default function App({ start = 'story', incidentId = null, onHome, onVali
           <button className={mode === 'today' ? 'on' : ''} onClick={() => { setMode('today'); setPlaying(false); setT(DAYS - 1) }}>Today</button>
         </div>
         <button className="storybtn" onClick={onHome}>Home</button>
-        <button className="storybtn" onClick={startStory}><FiRotateCcw /> Story</button>
+        <button className="storybtn" onClick={() => { location.hash = 'story' }}><FiRotateCcw /> Story</button>
         <button className="storybtn" onClick={onValidate}>Validation</button>
         <button className="storybtn" onClick={onLive}>Live prediction</button>
         <button className="storybtn" onClick={openOps}>Operations</button>

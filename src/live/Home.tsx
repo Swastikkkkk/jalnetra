@@ -26,7 +26,7 @@ export default function Home({ onRivers, onLive, onDemo, onValidate, onOps, onSt
             <button onClick={onLive}>Gandak village model</button>
             <button onClick={onDemo}><FiPlayCircle /> Demo: replay 2026 flood</button>
           </div>
-          <div className="hlinks rv"><button className="link" onClick={onValidate}><FiClock /> 2026 validation</button><button className="link" onClick={onStory}>Story of the 2026 flood</button><button className="link" onClick={onOps}><FiList /> Incidents</button></div>
+          <div className="hlinks rv"><button className="link" onClick={onValidate}><FiClock /> 2026 validation</button><button className="link" onClick={onStory}>Story: the August 2026 glacier flood</button><button className="link" onClick={onOps}><FiList /> Incidents</button></div>
           <div className="flow rv">DETECT <FiArrowRight /> PREDICT <FiArrowRight /> WARN <FiArrowRight /> EVACUATE <FiArrowRight /> VERIFY</div>
         </div>
         <div className="hr rv">
