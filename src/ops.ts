@@ -3,6 +3,9 @@ export const API = (import.meta.env.VITE_JALNETRA_API as string | undefined) ?? 
 const ENV_KEY = import.meta.env.VITE_JALNETRA_KEY as string | undefined
 const getKey = () => { try { return ENV_KEY || localStorage.getItem('jn_key') || undefined } catch { return ENV_KEY } }
 export const saveKey = (k: string) => { try { localStorage.setItem('jn_key', k.trim()) } catch { /* storage blocked */ } }
+const CONTACT_PHONE_KEY = 'jn_default_contact_phone'
+export const getDefaultContactPhone = () => { try { return localStorage.getItem(CONTACT_PHONE_KEY) || '+91' } catch { return '+91' } }
+export const saveDefaultContactPhone = (phone: string) => { try { localStorage.setItem(CONTACT_PHONE_KEY, phone.trim()) } catch { /* storage blocked */ } }
 
 export type Status = 'detected' | 'analyzing' | 'alert_created' | 'approved' | 'contacted' | 'evacuating' | 'resolved' | 'rejected' | 'ticketed' | 'fixed_claimed' | 'verified' | 'reopened' | 'escalated'
 export type Incident = {
@@ -60,7 +63,9 @@ export const createIncident = (b: Record<string, unknown>) => call<{ merged: boo
 /** Move a flood incident to "approved" through the allowed lifecycle steps. */
 export async function approveIncident(i: Incident, note: string) {
   let cur = i
-  const path: Partial<Record<Status, Status>> = { detected: 'alert_created', analyzing: 'alert_created', reopened: 'alert_created', alert_created: 'approved', escalated: 'approved' }
+  // The deployed API's lifecycle has no alert_created/analyzing transition;
+  // approval is the single operator gate before an alert can be sent.
+  const path: Partial<Record<Status, Status>> = { detected: 'approved', reopened: 'approved', escalated: 'approved' }
   for (let k = 0; k < 4 && path[cur.status]; k++) cur = (await setStatus(cur.id, path[cur.status]!, cur.status === 'alert_created' || cur.status === 'escalated' ? note : 'Prediction reviewed')).incident
   return cur
 }

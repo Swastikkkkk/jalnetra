@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FiAlertTriangle, FiRefreshCw, FiArrowLeft, FiClock, FiPhoneCall, FiVolume2, FiCopy, FiPlus } from 'react-icons/fi'
-import { ACTION_LABEL, NEXT, ROLE_LABEL, STATUS_LABEL, TYPE_LABEL, addContact, escalationDraft, getIncident, hasKey, hindiMessage, listAlerts, getTelephony, alertContext, type Telephony, listContacts, listIncidents, saveKey, sendAlerts, setStatus, type Alert, type Contact, type Event, type Incident, type Status } from './ops'
+import { ACTION_LABEL, NEXT, ROLE_LABEL, STATUS_LABEL, TYPE_LABEL, addContact, escalationDraft, getIncident, hasKey, hindiMessage, listAlerts, getTelephony, alertContext, type Telephony, listContacts, listIncidents, saveKey, sendAlerts, setStatus, getDefaultContactPhone, saveDefaultContactPhone, type Alert, type Contact, type Event, type Incident, type Status } from './ops'
 
 const ago = (iso: string) => {
   const m = Math.round((Date.now() - Date.parse(iso)) / 60000)
@@ -47,10 +47,11 @@ export default function OpsPanel({ inc, selId, onSelect, onBack }: { inc: Return
   const [keyIn, setKeyIn] = useState('')
   if (!hasKey()) return (
     <aside className="panel"><section>
-      <div className="kicker">Operations</div><div className="h">Connect the dashboard</div>
-      <p className="note">Paste the operator key from TEAM_KEYS.txt. It stays in this browser only.</p>
-      <input id="ops-key" className="note-in" placeholder="jn_..." value={keyIn} onChange={e => setKeyIn(e.target.value)} />
-      <div className="acts"><button disabled={!keyIn.trim()} onClick={() => { saveKey(keyIn); inc.load() }}>Connect</button><button className="ghost" onClick={onBack}><FiArrowLeft /> Back to map</button></div>
+      <div className="kicker">Operator access</div><div className="h">Connect your dashboard</div>
+      <p className="note">This private code is only for the JalNetra operator. Visitors do not need it. It stays in this browser.</p>
+      <label htmlFor="ops-key" className="kicker mt">Operator access code</label>
+      <input id="ops-key" className="note-in" type="password" autoComplete="off" placeholder="Enter your private code" value={keyIn} onChange={e => setKeyIn(e.target.value)} />
+      <div className="acts"><button disabled={!keyIn.trim()} onClick={() => { saveKey(keyIn); inc.load() }}>Connect operator dashboard</button><button className="ghost" onClick={onBack}><FiArrowLeft /> Back to public site</button></div>
     </section></aside>
   )
 
@@ -60,10 +61,12 @@ export default function OpsPanel({ inc, selId, onSelect, onBack }: { inc: Return
       <aside className="panel">
         <section>
           <button className="link back" onClick={() => onSelect(null)}><FiArrowLeft /> All incidents</button>
-          <div className="kicker">{TYPE_LABEL[i.incident_type]} · {i.severity} severity · {i.source}</div>
-          <div className="h">{i.title ?? `${TYPE_LABEL[i.incident_type]} report`}</div>
-          <div className="pills"><span className={'pill st-' + i.status}>{STATUS_LABEL[i.status]}</span>{sla && <span className={'pill ' + (i.overdue ? 'atrisk' : 'safe')}><FiClock /> {sla}</span>}</div>
-          <dl className="kv">
+          <div className="incident-summary">
+            <div className="kicker">{TYPE_LABEL[i.incident_type]} · {i.severity} severity · {i.source}</div>
+            <div className="h">{i.title ?? `${TYPE_LABEL[i.incident_type]} report`}</div>
+            <div className="pills"><span className={'pill st-' + i.status}>{STATUS_LABEL[i.status]}</span>{sla && <span className={'pill ' + (i.overdue ? 'atrisk' : 'safe')}><FiClock /> {sla}</span>}</div>
+          </div>
+          <dl className="kv incident-facts">
             <dt>Observed</dt><dd>{new Date(i.observed_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} IST</dd>
             <dt>Location</dt><dd>{i.lat.toFixed(4)}, {i.lng.toFixed(4)}</dd>
             <dt>Reports</dt><dd>{i.reports} · first from {i.reported_by}</dd>
@@ -72,11 +75,11 @@ export default function OpsPanel({ inc, selId, onSelect, onBack }: { inc: Return
             {i.details?.villages?.length > 0 && <><dt>Villages</dt><dd>{i.details.villages.slice(0, 12).join(', ')}{i.details.villages.length > 12 ? ` and ${i.details.villages.length - 12} more` : ''}</dd></>}
           </dl>
           {NEXT[i.status].length > 0 && (
-            <>
+            <div className="action-panel">
               <div className="kicker mt">Next action</div>
               <input id="ops-note" className="note-in" placeholder="Note for the record (optional)" value={note} onChange={e => setNote(e.target.value)} />
               <div className="acts">{NEXT[i.status].map(s => <button key={s} disabled={busy} className={s === 'rejected' || s === 'reopened' || s === 'escalated' ? 'ghost' : ''} onClick={() => act(s)}>{ACTION_LABEL[s]}</button>)}</div>
-            </>
+            </div>
           )}
           {actErr && <p className="err">{actErr}</p>}
           <WarnBlock i={i} />
@@ -112,37 +115,67 @@ export default function OpsPanel({ inc, selId, onSelect, onBack }: { inc: Return
 }
 
 function WarnBlock({ i }: { i: Incident }) {
+  const APPROVED_STATUSES: Status[] = ['approved', 'ticketed', 'contacted', 'evacuating']
   const [contacts, setContacts] = useState<Contact[]>([])
   const [picked, setPicked] = useState<string[]>([])
   const [msg, setMsg] = useState(hindiMessage(i))
-  const [channel, setChannel] = useState<'call' | 'sms'>('call')
+  const [channel, setChannel] = useState<'call' | 'sms' | 'both'>('call')
   const [alerts, setAlerts] = useState<Alert[]>([])
-  const [res, setRes] = useState<string | null>(null)
+  const [res, setRes] = useState<{ call?: string; sms?: string; error?: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [tel, setTel] = useState<Telephony | null>(null)
   const [demo, setDemo] = useState(false)
   const [adding, setAdding] = useState(false)
-  const [form, setForm] = useState({ name: '', role: 'sarpanch' as Contact['role'], phone: '+91', place_name: (i.details?.villages ?? [])[0] ?? '' })
-  const load = () => { listContacts(i.lat, i.lng, 25).then(setContacts).catch(() => {}); listAlerts(i.id).then(setAlerts).catch(() => {}) }
+  const [form, setForm] = useState({ name: '', role: 'sarpanch' as Contact['role'], phone: getDefaultContactPhone(), place_name: (i.details?.villages ?? [])[0] ?? '' })
+  const load = () => {
+    listContacts(i.lat, i.lng, 25).then(found => {
+      setContacts(found)
+      const existingPhone = found[0]?.phone
+      if (existingPhone && getDefaultContactPhone() === '+91') { saveDefaultContactPhone(existingPhone); setForm(f => ({ ...f, phone: existingPhone })) }
+    }).catch(() => {})
+    listAlerts(i.id).then(setAlerts).catch(() => {})
+  }
   useEffect(() => { setMsg(hindiMessage(i)); setPicked([]); setRes(null); load() }, [i.id])
   useEffect(() => { getTelephony().then(setTel).catch(() => {}) }, [])
+  const resultText = (label: string, r: Awaited<ReturnType<typeof sendAlerts>>) => {
+    const sent = r.results.filter(x => x.status === 'sent').length
+    const via = r.telephony === 'omnidimension' ? (sent ? `OmniDimension dispatched ${sent} Hindi AI call${sent === 1 ? '' : 's'}` : 'OmniDimension dispatch failed') : r.telephony === 'twilio' ? (sent ? `Twilio dispatched ${sent} SMS${sent === 1 ? '' : 'es'}` : 'Twilio dispatch failed') : 'No phone provider is configured; nothing was placed'
+    return `${label}: ${via}. ${r.results.map(x => `${x.contact}: ${x.status === 'sent' ? 'sent' : x.status}${x.error ? ` (${x.error})` : ''}`).join(' · ')}`
+  }
   const send = async () => {
+    if (!APPROVED_STATUSES.includes(i.status)) return
     setBusy(true); setRes(null)
+    const context = alertContext(i)
+    const next: { call?: string; sms?: string; error?: string } = {}
     try {
-      const r = await sendAlerts(i.id, picked, msg, channel, { demo: demo && channel === 'call', context: alertContext(i) })
-      const via = r.telephony === 'omnidimension' ? 'Hindi AI call placed via OmniDimension' : r.telephony === 'twilio' ? 'Sent via Twilio' : 'Logged only, no phone provider connected'
-      setRes(`${via}. ` + r.results.map(x => `${x.contact}: ${x.status === 'sent' ? 'ringing now' : x.status}${x.error ? ` (${x.error})` : ''}`).join(' · '))
+      if (channel === 'call' || channel === 'both') {
+        try {
+          const call = await sendAlerts(i.id, picked, msg, 'call', { demo, context })
+          next.call = resultText('Hindi voice call', call)
+        } catch (e) {
+          next.call = `Hindi voice call: ${(e as Error).message}`
+          setRes({ ...next })
+          return
+        }
+      }
+      if (channel === 'sms' || channel === 'both') {
+        try {
+          const sms = await sendAlerts(i.id, picked, msg, 'sms', { context })
+          next.sms = resultText('SMS', sms)
+        } catch (e) { next.sms = `SMS: ${(e as Error).message}` }
+      }
+      setRes(next)
       load()
-    } catch (e) { setRes((e as Error).message) } finally { setBusy(false) }
+    } finally { setBusy(false) }
   }
   const save = async () => {
     setBusy(true); setRes(null)
-    try { await addContact({ ...form, district: (i.details?.districts ?? [])[0] ?? null, lat: i.lat, lng: i.lng, language: 'hi' } as any); setAdding(false); setForm({ ...form, name: '', phone: '+91' }); load() } catch (e) { setRes((e as Error).message) } finally { setBusy(false) }
+    try { await addContact({ ...form, district: (i.details?.districts ?? [])[0] ?? null, lat: i.lat, lng: i.lng, language: 'hi' } as any); saveDefaultContactPhone(form.phone); setAdding(false); setForm({ ...form, name: '', phone: form.phone }); load() } catch (e) { setRes({ error: (e as Error).message }) } finally { setBusy(false) }
   }
   const preview = () => { try { const u = new SpeechSynthesisUtterance(msg); u.lang = 'hi-IN'; speechSynthesis.cancel(); speechSynthesis.speak(u) } catch { /* no speech */ } }
   return (
-    <>
-      <div className="kicker mt">Warn people nearby</div>
+    <div className="alert-panel">
+      <div className="alert-heading"><div className="kicker">Operator alert</div><div className="h">Warn people nearby</div><p className="note">Review the contacts and message, then choose one channel or send both sequentially.</p></div>
       {contacts.length === 0 ? <p className="note">No contacts within 25 km yet. Add the sarpanch, ASHA worker or NGO for this area.</p> : (
         <ul className="clist">{contacts.map(c => (
           <li key={c.id}><label><input type="checkbox" checked={picked.includes(c.id)} onChange={e => setPicked(p => e.target.checked ? [...p, c.id] : p.filter(x => x !== c.id))} />
@@ -159,16 +192,19 @@ function WarnBlock({ i }: { i: Incident }) {
         </div>
       ) : <button className="link back" onClick={() => setAdding(true)}><FiPlus /> Add contact</button>}
       {tel?.demo_phone && <label className="demo-row"><input type="checkbox" checked={demo} onChange={e => setDemo(e.target.checked)} /> <span>Also call demo phone <span className="imeta">{tel.demo_phone}</span></span></label>}
-      {tel && <p className="imeta">Voice calls: {tel.call === 'omnidimension' ? 'OmniDimension Hindi agent (can answer questions)' : tel.call === 'twilio' ? 'Twilio text to speech' : 'not connected'}</p>}
+      {tel && <p className="imeta">Voice calls: {tel.call === 'omnidimension' ? 'OmniDimension Hindi agent configured (verified on send)' : tel.call === 'twilio' ? 'Twilio text to speech configured (verified on send)' : 'not connected'}</p>}
+      {!APPROVED_STATUSES.includes(i.status) && <p className="note">Approve this incident before sending an alert.</p>}
+      {APPROVED_STATUSES.includes(i.status) && contacts.length === 0 && <p className="note">This incident is approved, but no phone contact is available. Add and select a sarpanch or responder before sending.</p>}
+      <label className="kicker mt" htmlFor="warn-msg">Message for selected contacts</label>
       <textarea id="warn-msg" className="note-in msg" rows={5} value={msg} onChange={e => setMsg(e.target.value)} />
-      <div className="acts">
-        <div className="seg sm inline">{(['call', 'sms'] as const).map(c => <button key={c} className={channel === c ? 'on' : ''} onClick={() => setChannel(c)}>{c === 'call' ? 'Voice call' : 'SMS'}</button>)}</div>
+      <div className="acts alert-actions">
+        <div className="seg sm inline channel-picker" aria-label="Alert channel">{(['call', 'sms', 'both'] as const).map(c => <button key={c} className={channel === c ? 'on' : ''} onClick={() => setChannel(c)}>{c === 'call' ? 'Voice call' : c === 'sms' ? 'SMS' : 'Call + SMS'}</button>)}</div>
         <button className="ghost" onClick={preview}><FiVolume2 /> Preview</button>
-        <button disabled={busy || (picked.length === 0 && !(demo && channel === 'call')) || !msg.trim()} onClick={send}><FiPhoneCall /> {busy ? 'Sending…' : `Send to ${picked.length + (demo && channel === 'call' ? 1 : 0) || 'selected'}`}</button>
+        <button className="primary-action" disabled={busy || !APPROVED_STATUSES.includes(i.status) || (picked.length === 0 && !(demo && channel === 'call')) || !msg.trim()} onClick={send}><FiPhoneCall /> {busy ? 'Sending…' : channel === 'both' ? 'Send Hindi call + SMS' : `Send ${channel === 'call' ? 'voice call' : 'SMS'}`}</button>
       </div>
-      {res && <p className="note">{res}</p>}
-      {alerts.length > 0 && <ul className="tl">{alerts.slice(0, 6).map(a => <li key={a.id}><b>{a.channel === 'call' ? 'Call' : 'SMS'} · {a.status === 'sent' ? 'sent' : a.status === 'failed' ? 'failed' : 'logged, not connected'}</b> · {a.jn_contacts?.name ?? 'Demo phone'} · {new Date(a.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</li>)}</ul>}
-    </>
+      {res && <div className="send-results" aria-live="polite">{res.error && <p className="note"><b>Error</b> · {res.error}</p>}{res.call && <p className="note"><b>Voice call</b> · {res.call.replace('Hindi voice call: ', '')}</p>}{res.sms && <p className="note"><b>SMS</b> · {res.sms.replace('SMS: ', '')}</p>}</div>}
+      {alerts.length > 0 && <div className="history"><div className="kicker">Recent alert history</div><ul className="tl">{alerts.slice(0, 6).map(a => <li key={a.id}><b>{a.channel === 'call' ? 'Call' : 'SMS'} · {a.status === 'sent' ? 'sent' : a.status === 'failed' ? 'failed' : 'logged, not connected'}</b> · {a.jn_contacts?.name ?? 'Demo phone'} · {new Date(a.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</li>)}</ul></div>}
+    </div>
   )
 }
 

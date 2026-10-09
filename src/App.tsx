@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import gsap from 'gsap'
 import DeckGL from '@deck.gl/react'
 import { FlyToInterpolator, LinearInterpolator, WebMercatorViewport, type MapViewState, type PickingInfo } from '@deck.gl/core'
 import { BitmapLayer, GeoJsonLayer, PathLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
@@ -15,6 +16,8 @@ import normalImg from './img/normal.png'
 import countries from './countries.json'
 import OpsPanel, { useIncidents } from './OpsPanel'
 import type { Incident } from './ops'
+import { BentoGrid, BentoGridItem } from './components/ui/bento-grid'
+import { Spotlight } from './components/ui/spotlight'
 
 type V = (typeof D.villages)[number]
 type State = 'affected' | 'atrisk' | 'watch' | 'safe'
@@ -162,6 +165,7 @@ export default function App({ start = 'story', incidentId = null, onHome, onVali
   const [step, setStep] = useState(0)
   const [normalOn, setNormalOn] = useState(false)
   const [live, setLive] = useState<typeof LIVE>(LIVE)
+  const landingRef = useRef<HTMLDivElement>(null)
   useEffect(() => { fetchLive().then(l => { if (l) setLive(l) }) }, [])
   const playTo = useRef<number | null>(null)
 
@@ -188,6 +192,26 @@ export default function App({ start = 'story', incidentId = null, onHome, onVali
 
   const obsIdx = useMemo(() => { let k = -1; OBS.forEach((o, i) => { if (o.day <= t) k = i }); return k }, [t])
   useEffect(() => { if (playing && obsIdx >= 1 && mode === 'early') setMode('active') }, [obsIdx, mode, playing])
+
+  // Landing motion is deliberately small: a staged reveal and one downstream signal.
+  useEffect(() => {
+    if (phase !== 'landing' || !landingRef.current) return
+    const root = landingRef.current
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const ctx = gsap.context(() => {
+      if (reduce) {
+        gsap.set('.landing-reveal', { opacity: 1, y: 0 })
+        gsap.set('.landing-flow-bead', { left: '94%' })
+        return
+      }
+      gsap.timeline({ defaults: { ease: 'power3.out' } })
+        .from('.landing-kicker', { opacity: 0, y: 10, duration: 0.45 })
+        .from('.landing-reveal', { opacity: 0, y: 18, duration: 0.65, stagger: 0.08 }, '-=.2')
+        .from('.landing-proof', { opacity: 0, y: 12, duration: 0.45 }, '-=.25')
+      gsap.to('.landing-flow-bead', { left: '94%', duration: 3.8, ease: 'sine.inOut', repeat: -1, yoyo: true, delay: 0.5 })
+    }, root)
+    return () => ctx.revert()
+  }, [phase])
   const wkm = waveKm(t)
   const prevObs = useRef(-1)
   useEffect(() => {
@@ -323,17 +347,41 @@ export default function App({ start = 'story', incidentId = null, onHome, onVali
         getTooltip={({ object, layer }: any) => !object ? null : layer?.id === 'roads' ? { text: `${object.name || object.ref || 'Road'}${object.cut ? ' · crosses water seen on 29 Sep' : ''}` } : layer?.id === 'shelters' ? { text: `${object.name || 'Unnamed'} · ${object.amenity}` } : layer?.id === 'villages' ? { text: `${object.name} · ${STATE_LABEL[states.get(object.id)!]}` } : null} />
 
       {phase === 'landing' && (
-        <div className="landing">
-          <div className="lcard">
-            <div className="eyebrow">JalNetra · flood intelligence</div>
-            <h1>Watch a real flood travel from Nepal to Bihar</h1>
-            <p>In September 2026, heavy rain in Nepal sent a flood wave down the Gandak into Bihar. This map replays it with real satellite images, river data and radar flood maps, step by step.</p>
-            <div className="lbtns">
-              <button className="primary" onClick={startStory}>Start the story <FiArrowRight /></button>
-              <button onClick={explore}><FiMap /> Explore the map</button>
-              <button onClick={openOps}>Operator dashboard</button>
+        <div className="landing" ref={landingRef}>
+          <Spotlight className="landing-spotlight" fill="#38bdf8" />
+          <div className="landing-shell">
+            <div className="landing-kicker eyebrow">JalNetra <span>·</span> flood intelligence for the Gandak corridor</div>
+            <div className="landing-grid">
+              <section className="landing-copy">
+                <div className="landing-reveal landing-label">A clear signal, before the water arrives</div>
+                <h1 className="landing-reveal">See the flood move from Nepal to the village.</h1>
+                <p className="landing-reveal">Replay the September 2026 Gandak event as one connected story: rain upstream, river flow downstream, radar proof, and a warning a village can act on.</p>
+                <div className="lbtns landing-reveal">
+                  <button className="primary" onClick={startStory}>Start the story <FiArrowRight /></button>
+                  <button onClick={explore}><FiMap /> Explore the map</button>
+                </div>
+                <div className="operator-guard landing-reveal">
+                  <div><span className="guard-dot" /> Operator approval stays human</div>
+                  <p>Review the signal and wording before anything is sent.</p>
+                  <button onClick={openOps}>Open operator dashboard <FiArrowRight /></button>
+                </div>
+              </section>
+              <aside className="landing-signal landing-reveal" aria-label="JalNetra signal path">
+                <div className="signal-head"><span>One connected view</span><span className="signal-status"><i /> historical replay</span></div>
+                <div className="signal-map" aria-hidden="true"><div className="signal-grid" /><div className="signal-route" /><div className="signal-beacon beacon-nepal" /><div className="signal-beacon beacon-village" /><div className="landing-flow-bead" /></div>
+                <div className="landing-flow">
+                  <div><b>01</b><strong>Nepal</strong><span>rain signal</span></div><i /><div><b>02</b><strong>River</strong><span>flow response</span></div><i /><div><b>03</b><strong>Village</strong><span>human review</span></div>
+                </div>
+                <p className="signal-note">The map keeps the evidence in view while the signal travels downstream.</p>
+              </aside>
             </div>
-            <div className="lsrc">Sentinel-1 and Sentinel-2 (ESA Copernicus) · GloFAS river model · Copernicus DEM · OpenStreetMap · GeoNames</div>
+            <BentoGrid className="landing-proof landing-reveal">
+              <BentoGridItem title={`${D.villages.length} villages`} description="tracked along the corridor" />
+              <BentoGridItem title={`${st.length} river points`} description="daily GloFAS flow observations" />
+              <BentoGridItem title={`${O2.km2.toLocaleString()} km²`} description="new water in the radar pass" />
+              <BentoGridItem title="Sentinel-1 + 2" description="satellite evidence, with sources" />
+            </BentoGrid>
+            <div className="lsrc landing-reveal">Sources: ESA Copernicus Sentinel-1/2 · GloFAS via Open-Meteo · Copernicus DEM · OpenStreetMap · GeoNames</div>
           </div>
         </div>
       )}

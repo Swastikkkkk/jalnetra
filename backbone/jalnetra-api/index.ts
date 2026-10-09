@@ -174,9 +174,14 @@ Deno.serve(async (req) => {
     const channel = b.channel === "sms" ? "sms" : "call";
     if ((!Array.isArray(b.contact_ids) || !b.contact_ids.length) && !b.demo) return json({ error: "Pick at least one contact" }, 400);
     if (!b.message) return json({ error: "message is required" }, 400);
-    const { data: inc } = await db.from("jn_incidents").select("id").eq("id", al[1]).maybeSingle();
+    const { data: inc } = await db.from("jn_incidents").select("id, status").eq("id", al[1]).maybeSingle();
     if (!inc) return json({ error: "Incident not found" }, 404);
+    // Ticketed is the legacy name used by existing approved incidents.
+    if (!["approved", "ticketed", "contacted", "evacuating"].includes(inc.status)) {
+      return json({ error: `Incident must be approved before sending alerts (current status: ${inc.status})` }, 409);
+    }
     const { data: contacts } = b.contact_ids?.length ? await db.from("jn_contacts").select("*").in("id", b.contact_ids) : { data: [] as any[] };
+    if (!b.demo && (contacts ?? []).length === 0) return json({ error: "No matching alert contacts found" }, 400);
     const { data: cfg } = await db.from("jn_config").select("key, value");
     const c = Object.fromEntries((cfg ?? []).map((r) => [r.key, r.value]));
     const omni = c.omnidim_key && c.omnidim_agent;
@@ -186,6 +191,7 @@ Deno.serve(async (req) => {
     // the demo phone from config can be called as an extra recipient
     const targets: { id: string | null; name: string; phone: string }[] = (contacts ?? []).map((x) => ({ id: x.id, name: x.name, phone: x.phone }));
     if (b.demo && c.alert_phone) targets.push({ id: null, name: "Demo phone", phone: c.alert_phone });
+    if (targets.length === 0) return json({ error: "No alert recipients configured" }, 400);
     const results = [];
     for (const ct of targets) {
       let status = "not_configured", ref: string | null = null, err: string | null = null;
