@@ -4,7 +4,7 @@ import { FlyToInterpolator, LinearInterpolator, WebMercatorViewport, type MapVie
 import { BitmapLayer, GeoJsonLayer, PathLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
 import { TripsLayer } from '@deck.gl/geo-layers'
 import { PathStyleExtension } from '@deck.gl/extensions'
-import { FiPlay, FiPause, FiSkipBack, FiSkipForward, FiX, FiNavigation, FiVolume2, FiPhoneCall, FiArrowRight, FiArrowLeft, FiMap, FiRotateCcw } from 'react-icons/fi'
+import { FiPlay, FiPause, FiSkipBack, FiSkipForward, FiX, FiNavigation, FiVolume2, FiArrowRight, FiArrowLeft, FiMap, FiRotateCcw } from 'react-icons/fi'
 import D from './data.json'
 import s2 from './img/s2.jpg'
 import o1 from './img/o1.png'
@@ -12,11 +12,9 @@ import o2 from './img/o2.png'
 import o3 from './img/o3.png'
 import corridorImg from './img/corridor.png'
 import normalImg from './img/normal.png'
-import indiaBoundary from './india-boundary.json'
+import countries from './countries.json'
 import OpsPanel, { useIncidents } from './OpsPanel'
-import { type Incident } from './ops'
-import { Spotlight } from './components/ui/spotlight'
-import { BentoGrid, BentoGridItem } from './components/ui/bento-grid'
+import type { Incident } from './ops'
 
 type V = (typeof D.villages)[number]
 type State = 'affected' | 'atrisk' | 'watch' | 'safe'
@@ -99,38 +97,54 @@ const rainTotal = (from: number, to: number) => Math.round(Math.max(...D.rain.po
 const O2 = OBS.find(o => o.id === 'o2')!
 const o2Idx = OBS.indexOf(O2)
 const o2Counts = (() => { const c: Record<State, number> = { affected: 0, atrisk: 0, watch: 0, safe: 0 }; D.villages.forEach(v => c[villageState(v, 'active', o2Idx)]++); return c })()
+const SPOT = D.villages.find(v => v.id === (D as any).spotlight) ?? D.villages[0]
 type Step = { title: string; kicker: string; body: string; facts?: [string, string][]; view?: Partial<MapViewState> | 'fit'; t: number; mode: Mode; layers: Partial<Record<'observed' | 'route' | 'corridor' | 'villages' | 'roads' | 'shelters', boolean>>; normal?: boolean; select?: number; play?: { from: number; to: number }; chart?: number; legend?: boolean; rain?: boolean; today?: boolean }
 const STEPS: Step[] = [
-  { kicker: 'Step 1 · Upstream signal', title: 'Rain builds in Nepal', t: rainPeak.day, mode: 'early', view: { longitude: 83.85, latitude: 27.85, zoom: 8.4 },
+  { kicker: '2026 flood · historical validation', title: 'The Gandak, from Nepal to Bihar', t: 0, mode: 'early', view: 'fit',
+    layers: { route: true, villages: false, corridor: false, observed: false, roads: false, shelters: false },
+    body: `The Gandak starts in Nepal\u2019s Himalaya, becomes the Narayani at Devghat and enters Bihar at Valmikinagar barrage, flowing ${Math.round(st[st.length - 1].km)} km to Hajipur on the Ganga. Everything here is real data: satellite imagery, river flow and radar flood maps.`,
+    facts: [['Imagery', 'Sentinel-2 satellite mosaic'], ['River line', 'OpenStreetMap'], ['Villages tracked', `${D.villages.length}`]] },
+  { kicker: 'Step 1 · The signal', title: 'Heavy rain falls in Nepal', t: rainPeak.day, mode: 'early', view: { longitude: 83.85, latitude: 27.85, zoom: 8.4 },
     layers: { route: true, villages: false, corridor: false, observed: false }, rain: true,
-    body: 'Heavy rain over the Nepal catchment is the first signal. The circles show rainfall at four points, giving operators an upstream view before the river responds.',
-    facts: [['Peak rainfall', `${Math.round(rainPeak.mm)} mm`], ['Catchment total', `up to ${rainTotal(9, 12)} mm`], ['Source', 'Open-Meteo daily rainfall']] },
-  { kicker: 'Step 2 · River response', title: 'The Narayani rises at Devghat', t: st[0].peakDay, mode: 'early', view: { longitude: st[0].lng, latitude: st[0].lat, zoom: 9.2, pitch: 30 },
+    body: 'Between 24 and 27 September, storms dropped heavy rain on the hills of Lumbini and Gandaki provinces. The circles show daily rain at four points in the catchment.',
+    facts: [['Heaviest day', `${Math.round(rainPeak.mm)} mm on ${fmtDay(rainPeak.day).slice(0, 6)}`], ['4-day total', `up to ${rainTotal(9, 12)} mm`], ['Source', 'Open-Meteo daily rainfall']] },
+  { kicker: 'Step 2 · The river reacts', title: 'The Narayani rises at Devghat', t: st[0].peakDay, mode: 'early', view: { longitude: st[0].lng, latitude: st[0].lat, zoom: 9.2, pitch: 30 },
     layers: { route: true, villages: false, corridor: false, observed: false }, chart: 0,
-    body: 'Flow at Devghat rises after the rainfall signal. Brighter, thicker particles show stronger discharge at the first river station.',
-    facts: [['Before', `${Math.round(Math.min(...st[0].q.slice(0, 11))).toLocaleString()} m³/s`], ['Peak', `${Math.round(st[0].peakQ).toLocaleString()} m³/s`], ['Source', 'GloFAS river model, daily']] },
-  { kicker: 'Step 3 · Cross-border reach', title: 'Water reaches India', t: O2.day + 0.01, mode: 'active', view: { longitude: 84.2, latitude: 26.88, zoom: 9.3 },
+    body: `A day after the heaviest rain, flow at Devghat more than doubled. The brighter and thicker the moving particles on the river, the more water is flowing.`,
+    facts: [['Before', `${Math.round(Math.min(...st[0].q.slice(0, 11))).toLocaleString()} m\u00b3/s`], ['Peak', `${Math.round(st[0].peakQ).toLocaleString()} m\u00b3/s on ${fmtDay(st[0].peakDay).slice(0, 6)}`], ['Source', 'GloFAS river model, daily']] },
+  { kicker: 'Step 3 · The wave travels', title: 'The flood wave moves downstream', t: st[0].peakDay - 1, mode: 'early', view: undefined,
+    layers: { route: true, villages: false, corridor: false, observed: false }, play: { from: st[0].peakDay - 1, to: st[st.length - 1].peakDay + 0.6 },
+    body: 'Watch the white ring: it marks the furthest point where the river is close to its peak. The camera follows it from Nepal into Bihar, one day every 1.6 seconds.',
+    facts: st.map(s => [s.label, `peak ${fmtDay(s.peakDay).slice(0, 6)}`] as [string, string]) },
+  { kicker: 'Step 4 · Satellite proof', title: 'Radar sees the flood', t: O2.day + 0.01, mode: 'active', view: { longitude: 84.2, latitude: 26.88, zoom: 9.3 },
     layers: { route: true, villages: false, corridor: false, observed: true },
-    body: 'Sentinel-1 radar confirms new water across the downstream floodplain in India. Radar can see through cloud, giving the team an observation to act on.',
-    facts: [['New water', `${O2.km2.toLocaleString()} km²`], ['Where', O2.place.replace('Gandak floodplain near ', 'Around ')], ['Source', 'Sentinel-1 radar observation']] },
-  { kicker: 'Step 4 · Coordination need', title: 'Villages and responders need a shared view', t: O2.day + 0.01, mode: 'active', view: 'fit',
+    body: `On ${fmtTime(O2.time)} the Sentinel-1 radar satellite passed overhead. Radar sees through cloud, so it maps flooding even during the monsoon. Blue is land that was dry on 17 September and under water now.`,
+    facts: [['New water', `${O2.km2.toLocaleString()} km\u00b2`], ['Where', O2.place.replace('Gandak floodplain near ', 'Around ')], ['Compared with', 'Radar pass of 17 Sep']] },
+  { kicker: 'Step 5 · What got flooded', title: 'Normal river versus flood water', t: O2.day + 0.01, mode: 'active', view: { longitude: 84.27, latitude: 26.8, zoom: 10.2 },
+    layers: { route: false, villages: false, corridor: false, observed: true }, normal: true,
+    body: 'White is where the river normally flows (water seen most of the time since 1984). Blue is extra water from this flood only. Land cover maps then show what the flood water covered: mostly farmland.',
+    facts: [['Normal river', 'JRC Global Surface Water, 1984\u20132021'], ['Cropland flooded', `${(O2 as any).cropKm2?.toLocaleString() ?? '\u2013'} km\u00b2`], ['Land cover', 'ESA WorldCover 2021, 10 m']] },
+  { kicker: 'Step 6 · Who is at risk', title: 'Villages along the corridor', t: O2.day + 0.01, mode: 'active', view: 'fit',
     layers: { route: true, villages: true, corridor: true, observed: true }, legend: true,
-    body: 'The risk corridor connects the observed water to villages and nearby responders. Operators can use the shared map to decide who needs a warning and where support should be coordinated.',
+    body: `The amber outline is JalNetra\u2019s predicted risk corridor: land within 12 km of the river and less than 5 m above it. Each dot is a village, coloured by what the data shows.`,
     facts: [['Affected', `${o2Counts.affected} villages, radar saw water within 500 m`], ['At risk', `${o2Counts.atrisk} more inside the corridor`], ['Watch', `${o2Counts.watch} within 2 km of it`]] },
-  { kicker: 'Step 5 · Operator action', title: 'Open the operator broadcast workflow', t: O2.day + 0.01, mode: 'active', view: 'fit',
+  { kicker: 'Step 7 · The warning', title: `Calling ${SPOT.name}`, t: O2.day + 0.01, mode: 'active', view: { longitude: SPOT.lng, latitude: SPOT.lat, zoom: 10.8 },
+    layers: { route: true, villages: true, corridor: true, observed: true }, select: SPOT.id,
+    body: `${SPOT.name} in ${SPOT.district} district had flood water at the village on 29 September. JalNetra writes the warning in Hindi and reads it out, so it works on any basic phone call.`,
+    facts: [] },
+  { kicker: 'Step 8 · Right now', title: 'The Gandak today', t: DAYS - 1, mode: 'today', view: 'fit',
+    layers: { route: true, villages: true, corridor: true, observed: true }, today: true,
+    body: 'JalNetra keeps watching after the flood. This is the live check: today\u2019s river model run, the rain forecast for Nepal and the most recent radar pass.',
+    facts: [] },
+  { kicker: 'The idea', title: 'From upstream signal to downstream village', t: O2.day + 0.01, mode: 'active', view: 'fit',
     layers: { route: true, villages: true, corridor: true, observed: true },
-    body: 'The signal is ready for human review. Open Operations to select incidents, coordinate responders and approve a broadcast to the villages that need it.',
+    body: 'Rain in Nepal, the river rising, the wave moving into Bihar, radar confirming the flood, and a warning reaching the village. Explore the map yourself to click any village or river stretch.',
     facts: [] },
 ]
+
 const INITIAL: MapViewState = { longitude: 84.45, latitude: 26.85, zoom: 7.7, pitch: 0, bearing: 0, minZoom: 6.2, maxZoom: 11.5 }
 
-export default function App() {
-  // The old deployment exposed a `#demo` hash that opened the long replay
-  // screen. This app has one intentional entry point now: the short landing
-  // flow. Remove stale hashes when someone follows an old shared URL.
-  useEffect(() => {
-    if (window.location.hash) window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
-  }, [])
+export default function App({ start = 'story', incidentId = null, onHome, onValidate, onLive }: { start?: 'story' | 'explore' | 'ops'; incidentId?: string | null; onHome: () => void; onValidate: () => void; onLive: () => void }) {
   const [view, setView] = useState<MapViewState>(INITIAL)
   const [t, setT] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -142,9 +156,9 @@ export default function App() {
   const [reach, setReach] = useState<{ km: number; si: number } | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [anim, setAnim] = useState(0)
-  const [phase, setPhase] = useState<'landing' | 'story' | 'explore' | 'ops'>('landing')
+  const [phase, setPhase] = useState<'landing' | 'story' | 'explore' | 'ops'>(start)
   const inc = useIncidents()
-  const [opsSel, setOpsSel] = useState<string | null>(null)
+  const [opsSel, setOpsSel] = useState<string | null>(incidentId)
   const [step, setStep] = useState(0)
   const [normalOn, setNormalOn] = useState(false)
   const [live, setLive] = useState<typeof LIVE>(LIVE)
@@ -205,7 +219,7 @@ export default function App() {
     return { longitude: vp.longitude, latitude: vp.latitude, zoom: vp.zoom }
   }
   const fly = (v: Partial<MapViewState>, dur = 2000) => setView(cur => ({ ...cur, pitch: 0, bearing: 0, ...v, transitionDuration: dur, transitionInterpolator: new FlyToInterpolator({ speed: 1.2 }) }))
-  useEffect(() => { setView(v => ({ ...v, ...fit(0) })) }, [])
+  useEffect(() => { setView(v => ({ ...v, ...fit(0) })); if (start === 'story') applyStep(0); else if (start === 'explore') explore() }, []) // eslint-disable-line
   const panelW = window.innerWidth > 760 ? 460 : 0
   const applyStep = (i: number) => {
     const s = STEPS[i]; setStep(i); setPlaying(false); setFollow(false); playTo.current = null; setSel(null); setReach(null)
@@ -218,7 +232,6 @@ export default function App() {
   const openOps = () => { setPhase('ops'); setSel(null); setReach(null); setPlaying(false); setFollow(false); fly({ ...fit(0) }) }
   const startStory = () => { setPhase('story'); applyStep(0) }
   const explore = () => { setPhase('explore'); setStep(0); setLayers({ observed: true, route: true, corridor: true, villages: true, roads: false, shelters: false }); setNormalOn(false); setMode('active'); setT(OBS[1].day + 0.01); fly({ ...fit(0) }) }
-  const openCurrent = () => { setPhase('explore'); setStep(0); setLayers({ observed: true, route: true, corridor: true, villages: true, roads: false, shelters: false }); setNormalOn(false); setMode('today'); setPlaying(false); setFollow(false); setT(DAYS - 1); fly({ ...fit(0) }) }
   const states = useMemo(() => new Map(D.villages.map(v => [v.id, villageState(v, mode, obsIdx)])), [mode, obsIdx])
   const counts = useMemo(() => { const c: Record<State, number> = { affected: 0, atrisk: 0, watch: 0, safe: 0 }; states.forEach(s => c[s]++); return c }, [states])
 
@@ -239,8 +252,7 @@ export default function App() {
 
   const tq = Math.round(t * 20)
   const L: any[] = []
-  // India-specific admin-1 boundaries provide the national shape and state context.
-  L.push(new GeoJsonLayer({ id: 'india-boundary', data: indiaBoundary as any, filled: false, stroked: true, getLineColor: [248, 250, 252, 210], lineWidthMinPixels: 2, lineWidthMaxPixels: 4 }))
+  L.push(new GeoJsonLayer({ id: 'countries', data: countries as any, filled: true, stroked: true, getFillColor: [16, 19, 24], getLineColor: [70, 78, 92], lineWidthMinPixels: 1 }))
   L.push(new PathLayer({ id: 'network-map', data: D.network, getPath: (d: any) => d, getColor: [70, 110, 150], widthMinPixels: 1 }))
   if (sat) L.push(new BitmapLayer({ id: 's2', image: s2, bounds: S2B }))
   if (normalOn) L.push(new BitmapLayer({ id: 'normal', image: normalImg, bounds: BOUNDS, opacity: 0.9 }))
@@ -295,7 +307,7 @@ export default function App() {
   }
 
   if (phase === 'ops') {
-    for (let k = L.length - 1; k >= 0; k--) if (!['india-boundary', 'network-map', 's2', 'river-base', 'flow0', 'flow2000', 'labels', 'stations'].includes(L[k].id)) L.splice(k, 1)
+    for (let k = L.length - 1; k >= 0; k--) if (!['countries', 'network-map', 's2', 'river-base', 'flow0', 'flow2000', 'labels', 'stations'].includes(L[k].id)) L.splice(k, 1)
     const SEV: Record<string, [number, number, number]> = { high: [248, 113, 113], medium: [245, 158, 11], low: [253, 224, 71] }
     L.push(new ScatterplotLayer({ id: 'incidents', data: inc.items, getPosition: (d: Incident) => [d.lng, d.lat], radiusUnits: 'pixels', getRadius: (d: Incident) => (d.id === opsSel ? 11 : 7),
       getFillColor: (d: Incident) => [...SEV[d.severity], ['verified', 'rejected'].includes(d.status) ? 90 : 240] as any, stroked: true, getLineColor: (d: Incident) => (d.id === opsSel ? [255, 255, 255] : [10, 12, 16]), lineWidthMinPixels: 1.5,
@@ -312,39 +324,16 @@ export default function App() {
 
       {phase === 'landing' && (
         <div className="landing">
-           <Spotlight className="landing-spotlight" fill="#7dd3fc" />
-          <div className="lwrap">
-            <section className="lcard" aria-labelledby="landing-title">
-              <div className="eyebrow"><span className="status-dot" /> JalNetra · flood intelligence</div>
-              <div className="lbadge">NEPAL → INDIA FLOOD REPLAY · GANDAK CORRIDOR</div>
-              <h1 id="landing-title">Know where the flood is going <em>before it arrives.</em></h1>
-               <p className="lede">See the river now, or review how an upstream signal became a downstream warning.</p>
-               <div className="lbtns">
-                 <button className="primary" onClick={openCurrent}>Current river situation <FiArrowRight /></button>
-                 <button onClick={startStory}>Review Nepal → India event <FiArrowRight /></button>
-               </div>
-               <p className="safeguard">Warnings are broadcast only after operator approval.</p>
-               <div className="secondary-nav"><button className="link" onClick={explore}><FiMap /> Technical map</button><button className="link" onClick={openOps}>Operations</button></div>
-              <p className="lsrc">Replay evidence: Sentinel-1/2, GloFAS, Copernicus DEM and OpenStreetMap.</p>
-            </section>
-
-            <section className="lproof" aria-label="How JalNetra works">
-              <div className="proof-head"><span className="kicker">The operating loop</span><span className="proof-line" /></div>
-               <BentoGrid className="lsteps">
-                 <BentoGridItem title="Detect upstream" description="See rain build in Nepal and flow rise at the first river station." icon={<span className="step-no">01</span>} />
-                 <BentoGridItem title="Predict villages" description="Trace the wave into a terrain-informed risk corridor." icon={<span className="step-no">02</span>} />
-                 <BentoGridItem title="Broadcast the warning" description="Select nearby responders and approve a Hindi call or SMS." icon={<span className="step-no">03</span>} />
-               </BentoGrid>
-              <div className="validation">
-                 <div className="proof-head"><span className="kicker">Evidence from the replay</span><span className="proof-tag">REAL DATA</span></div>
-                <div className="metrics">
-                  <div><strong>{D.villages.length}</strong><span>villages tracked</span></div>
-                  <div><strong>{O2.km2.toLocaleString()} km²</strong><span>new water seen</span></div>
-                  <div><strong>{o2Counts.affected}</strong><span>villages affected</span></div>
-                </div>
-                 <p className="proof-note">Nepal-to-India flood replay · Sentinel-1 · {shortDate(O2.time)}. Affected means radar saw new water within 500 m of a village; these are observations, not a forecast accuracy score.</p>
-              </div>
-            </section>
+          <div className="lcard">
+            <div className="eyebrow">JalNetra · flood intelligence</div>
+            <h1>Watch a real flood travel from Nepal to Bihar</h1>
+            <p>In September 2026, heavy rain in Nepal sent a flood wave down the Gandak into Bihar. This map replays it with real satellite images, river data and radar flood maps, step by step.</p>
+            <div className="lbtns">
+              <button className="primary" onClick={startStory}>Start the story <FiArrowRight /></button>
+              <button onClick={explore}><FiMap /> Explore the map</button>
+              <button onClick={openOps}>Operator dashboard</button>
+            </div>
+            <div className="lsrc">Sentinel-1 and Sentinel-2 (ESA Copernicus) · GloFAS river model · Copernicus DEM · OpenStreetMap · GeoNames</div>
           </div>
         </div>
       )}
@@ -358,32 +347,34 @@ export default function App() {
           {STEPS[step].chart !== undefined && <Spark q={st[STEPS[step].chart!].q} t={t} peakDay={st[STEPS[step].chart!].peakDay} />}
           {STEPS[step].legend && <Legend />}
           {STEPS[step].today && <TodayCard bare live={live} />}
-           {sel && STEPS[step].select && <VillageCard v={sel} state={states.get(sel.id)!} obs={curObs} onClose={() => setSel(null)} bare />}
-            {step === 4 && <button className="speak" onClick={openOps}><FiPhoneCall /> Open operator broadcast</button>}
-          <div className="sdate">Replay evidence · September 2026 dataset{playing ? ' · playing' : ''}</div>
+          {sel && STEPS[step].select && <VillageCard v={sel} state={states.get(sel.id)!} obs={curObs} onClose={() => setSel(null)} bare />}
+          <div className="sdate">{fmtDay(t)}{playing ? ' · playing' : ''}</div>
           <div className="snav">
-            <button onClick={() => (step === 0 ? setPhase('landing') : applyStep(step - 1))}><FiArrowLeft /> Back</button>
-            {step < STEPS.length - 1 ? <button className="primary" onClick={() => applyStep(step + 1)}>Next <FiArrowRight /></button> : <button className="primary" onClick={openOps}><FiPhoneCall /> Open operations</button>}
+            <button onClick={() => (step === 0 ? onHome() : applyStep(step - 1))}><FiArrowLeft /> Back</button>
+            {step < STEPS.length - 1 ? <button className="primary" onClick={() => applyStep(step + 1)}>Next <FiArrowRight /></button> : <button className="primary" onClick={explore}><FiMap /> Explore the map</button>}
           </div>
-          {step === STEPS.length - 1 && <button className="link" onClick={() => applyStep(0)}>Replay the story</button>}
+          {step === STEPS.length - 1 && <><button className="link" onClick={onValidate}>What if JalNetra had been running live?</button><button className="link" onClick={onLive}>Go to live prediction</button><button className="link" onClick={() => applyStep(0)}>Replay the story</button></>}
         </aside>
       )}
       {phase === 'ops' && (<>
-        <header className="top"><div className="brand"><div className="eyebrow">JalNetra · operator dashboard</div><div className="title">Incidents from every JalNetra part</div></div></header>
-        <OpsPanel inc={inc} selId={opsSel} onSelect={selectInc} onBack={() => { setPhase('explore'); setOpsSel(null) }} />
+        <header className="top"><button className="storybtn" onClick={onHome}>Home</button><div className="brand"><div className="eyebrow">JalNetra · operator dashboard</div><div className="title">Incidents from every JalNetra part</div></div><button className="storybtn" onClick={onLive}>Live prediction</button></header>
+        <OpsPanel inc={inc} selId={opsSel} onSelect={selectInc} onBack={onLive} />
       </>)}
       {phase === 'explore' && (<>
       <header className="top">
         <div className="brand">
           <div className="eyebrow">JalNetra · Gandak corridor, Nepal to Bihar</div>
-          <div className="title">Current river situation</div>
+          <div className="title">September 2026 flood · historical</div>
         </div>
         <div className="seg" aria-label="Mode">
           <button className={mode === 'early' ? 'on' : ''} onClick={() => setMode('early')}>Early warning</button>
           <button className={mode === 'active' ? 'on' : ''} onClick={() => { setMode('active'); if (obsIdx < 0) setT(OBS[1].day + 0.01) }}>Active flood</button>
           <button className={mode === 'today' ? 'on' : ''} onClick={() => { setMode('today'); setPlaying(false); setT(DAYS - 1) }}>Today</button>
         </div>
-        <button className="storybtn" onClick={startStory}><FiRotateCcw /> Story</button>
+        <button className="storybtn" onClick={onHome}>Home</button>
+        <button className="storybtn" onClick={() => { location.hash = 'story' }}><FiRotateCcw /> Story</button>
+        <button className="storybtn" onClick={onValidate}>Validation</button>
+        <button className="storybtn" onClick={onLive}>Live prediction</button>
         <button className="storybtn" onClick={openOps}>Operations</button>
         <div className="seg" aria-label="Basemap">
           <button className={sat ? 'on' : ''} onClick={() => setSat(true)}>Satellite</button>
@@ -553,7 +544,7 @@ function Legend() {
   )
 }
 
-function VillageCard({ v, state, obs, onClose, bare, onCall }: { v: V; state: State; obs: (typeof OBS)[number] | null; onClose: () => void; bare?: boolean; onCall?: () => void }) {
+function VillageCard({ v, state, obs, onClose, bare }: { v: V; state: State; obs: (typeof OBS)[number] | null; onClose: () => void; bare?: boolean }) {
   const d = obs ? (v.obs as Record<string, number | null>)[obs.id] : undefined
   const s = st[v.si]
   const reasons: string[] = []
@@ -584,7 +575,6 @@ function VillageCard({ v, state, obs, onClose, bare, onCall }: { v: V; state: St
       <div className="kicker mt">Hindi warning</div>
       <p className="hi">{hindi}</p>
       <button className="speak" onClick={speak}><FiVolume2 /> Play in browser</button>
-      {onCall && <button className="speak" onClick={onCall}><FiPhoneCall /> Call through JalNetra</button>}
     </section>
   )
 }

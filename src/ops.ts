@@ -4,7 +4,7 @@ const ENV_KEY = import.meta.env.VITE_JALNETRA_KEY as string | undefined
 const getKey = () => { try { return ENV_KEY || localStorage.getItem('jn_key') || undefined } catch { return ENV_KEY } }
 export const saveKey = (k: string) => { try { localStorage.setItem('jn_key', k.trim()) } catch { /* storage blocked */ } }
 
-export type Status = 'detected' | 'approved' | 'rejected' | 'ticketed' | 'fixed_claimed' | 'verified' | 'reopened' | 'escalated'
+export type Status = 'detected' | 'analyzing' | 'alert_created' | 'approved' | 'contacted' | 'evacuating' | 'resolved' | 'rejected' | 'ticketed' | 'fixed_claimed' | 'verified' | 'reopened' | 'escalated'
 export type Incident = {
   id: string; incident_type: 'river_flood' | 'waterlogging' | 'pothole' | 'leak'; severity: 'low' | 'medium' | 'high'; confidence: number
   lat: number; lng: number; observed_at: string; source: string; title: string | null; evidence_url: string | null; details: Record<string, any>
@@ -12,15 +12,26 @@ export type Incident = {
 }
 export type Event = { id: number; action: string; actor: string; note: string | null; created_at: string }
 
-export const NEXT: Record<Status, Status[]> = {
+// Same lifecycle as the API. Floods: detected > analyzing > alert_created > approved > contacted > evacuating > resolved > verified
+const FLOOD_NEXT: Record<Status, Status[]> = {
+  detected: ['analyzing', 'alert_created', 'rejected'], analyzing: ['alert_created', 'rejected'], alert_created: ['approved', 'rejected', 'escalated'],
+  approved: ['contacted', 'rejected', 'escalated'], contacted: ['evacuating', 'resolved', 'escalated'], evacuating: ['resolved', 'escalated'], resolved: ['verified', 'reopened'],
+  reopened: ['alert_created', 'escalated'], escalated: ['approved', 'contacted', 'evacuating', 'resolved'], ticketed: [], fixed_claimed: [], rejected: [], verified: [],
+}
+const CIVIC_NEXT: Record<Status, Status[]> = {
   detected: ['approved', 'rejected'], approved: ['ticketed', 'rejected'], ticketed: ['fixed_claimed', 'escalated'],
   fixed_claimed: ['verified', 'reopened'], reopened: ['ticketed', 'escalated'], escalated: ['ticketed', 'fixed_claimed'], rejected: [], verified: [],
+  analyzing: [], alert_created: ['approved', 'rejected'], contacted: [], evacuating: [], resolved: ['verified'],
 }
+export const NEXT = CIVIC_NEXT
+export const nextFor = (i: Incident) => (i.incident_type === 'river_flood' ? FLOOD_NEXT : CIVIC_NEXT)[i.status] ?? []
 export const STATUS_LABEL: Record<Status, string> = {
-  detected: 'Detected', approved: 'Approved', rejected: 'Rejected', ticketed: 'Ticket raised', fixed_claimed: 'Marked fixed', verified: 'Verified fixed', reopened: 'Reopened', escalated: 'Escalated',
+  detected: 'Detected', analyzing: 'Analyzing', alert_created: 'Alert created', approved: 'Operator approved', contacted: 'Sarpanch contacted', evacuating: 'Evacuation initiated', resolved: 'Resolved',
+  rejected: 'Rejected', ticketed: 'Ticket raised', fixed_claimed: 'Marked fixed', verified: 'Verified', reopened: 'Reopened', escalated: 'Escalation required',
 }
 export const ACTION_LABEL: Record<Status, string> = {
-  detected: 'Detect', approved: 'Approve', rejected: 'Reject', ticketed: 'Raise ticket', fixed_claimed: 'Mark fixed', verified: 'Verify fix', reopened: 'Reopen', escalated: 'Escalate',
+  detected: 'Detect', analyzing: 'Start analysis', alert_created: 'Create alert', approved: 'Approve', contacted: 'Mark contacted', evacuating: 'Evacuation started', resolved: 'Mark resolved',
+  rejected: 'Reject', ticketed: 'Raise ticket', fixed_claimed: 'Mark fixed', verified: 'Verify', reopened: 'Reopen', escalated: 'Escalate',
 }
 export const TYPE_LABEL = { river_flood: 'River flood', waterlogging: 'Waterlogging', pothole: 'Pothole', leak: 'Leak' } as const
 export const hasKey = () => !!getKey()
@@ -37,16 +48,25 @@ export const listIncidents = () => call<{ incidents: Incident[] }>('/incidents?l
 export const getIncident = (id: string) => call<{ incident: Incident; events: Event[] }>(`/incidents/${id}`)
 export const setStatus = (id: string, status: Status, note?: string) => call<{ incident: Incident }>(`/incidents/${id}`, { method: 'PATCH', body: JSON.stringify({ status, note }) })
 
-export type Contact = { id: string; name: string; role: 'sarpanch' | 'hospital' | 'asha' | 'ngo' | 'official' | 'volunteer'; phone: string; place_name: string; district: string | null; lat: number; lng: number; km?: number }
-export type Alert = { id: string; channel: 'call' | 'sms'; message: string; status: 'sent' | 'failed' | 'not_configured'; error: string | null; created_at: string; jn_contacts: { name: string; role: string; phone: string; place_name: string } | null }
-export const ROLE_LABEL = { sarpanch: 'Sarpanch', hospital: 'Hospital', asha: 'ASHA worker', ngo: 'NGO', official: 'Official', volunteer: 'Local responder' } as const
+export type Contact = { id: string; name: string; role: 'sarpanch' | 'asha' | 'ngo' | 'official' | 'volunteer'; phone: string; place_name: string; district: string | null; lat: number; lng: number; km?: number }
+export type Alert = { id: string; channel: 'call' | 'sms'; message: string; status: 'sent' | 'failed' | 'not_configured'; error: string | null; created_at: string; jn_contacts: { name: string; role: string; phone: string; place_name: string } | null
+  call_status: string | null; summary: string | null; transcript: string | null; questions: string[] | null; outcome: string | null; context: Record<string, unknown> | null }
+export const ROLE_LABEL = { sarpanch: 'Sarpanch', asha: 'ASHA worker', ngo: 'NGO', official: 'Official', volunteer: 'Volunteer' } as const
 export const listContacts = (lat: number, lng: number, km = 20) => call<{ contacts: Contact[] }>(`/contacts?lat=${lat}&lng=${lng}&km=${km}`).then(r => r.contacts)
 export const addContact = (c: Omit<Contact, 'id' | 'km'>) => call<{ contact: Contact }>('/contacts', { method: 'POST', body: JSON.stringify(c) }).then(r => r.contact)
-export type Telephony = { call: 'omnidimension' | 'twilio' | 'not_configured' }
-export type AlertContext = { place: string; title: string; source: string; observed: string; safe_place: string }
+export type Telephony = { call: 'omnidimension' | 'twilio' | 'not_configured'; demo_phone: string | null }
+export type AlertContext = { place: string; title: string; source: string; observed: string; safe_place: string; village?: string; risk?: string; impact_time?: string; route?: string; model_updated?: string; simulated?: boolean }
+export const createIncident = (b: Record<string, unknown>) => call<{ merged: boolean; incident: Incident }>('/incidents', { method: 'POST', body: JSON.stringify(b) })
+/** Move a flood incident to "approved" through the allowed lifecycle steps. */
+export async function approveIncident(i: Incident, note: string) {
+  let cur = i
+  const path: Partial<Record<Status, Status>> = { detected: 'alert_created', analyzing: 'alert_created', reopened: 'alert_created', alert_created: 'approved', escalated: 'approved' }
+  for (let k = 0; k < 4 && path[cur.status]; k++) cur = (await setStatus(cur.id, path[cur.status]!, cur.status === 'alert_created' || cur.status === 'escalated' ? note : 'Prediction reviewed')).incident
+  return cur
+}
 export const getTelephony = () => call<Telephony>('/telephony')
-export const sendAlerts = (id: string, contact_ids: string[], message: string, channel: 'call' | 'sms', opts: { context?: AlertContext } = {}) =>
-  call<{ telephony: Telephony['call']; results: { contact: string; phone: string; status: string; error: string | null }[] }>(`/incidents/${id}/alerts`, { method: 'POST', body: JSON.stringify({ contact_ids, message, channel, ...opts }) })
+export const sendAlerts = (id: string, contact_ids: string[], message: string, channel: 'call' | 'sms', opts: { demo?: boolean; context?: AlertContext } = {}) =>
+  call<{ telephony: Telephony['call']; status?: Status; results: { contact: string; phone: string; status: string; error: string | null }[] }>(`/incidents/${id}/alerts`, { method: 'POST', body: JSON.stringify({ contact_ids, message, channel, ...opts }) })
 export function alertContext(i: Incident): AlertContext {
   return {
     place: [i.details?.reach, ...(i.details?.villages ?? []).slice(0, 3)].filter(Boolean).join(', ') || `${i.lat.toFixed(3)}, ${i.lng.toFixed(3)}`,
@@ -71,3 +91,5 @@ export function escalationDraft(i: Incident) {
   const first = new Date(i.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
   return `${i.title ?? 'Reported issue'}. First flagged by JalNetra on ${first} (${i.source}, ${i.reports} report${i.reports > 1 ? 's' : ''}). Still open ${hrs} h past its deadline. Location ${i.lat.toFixed(4)}, ${i.lng.toFixed(4)}. [authority handle]`
 }
+export type RunSummary = { id: number; created_at: string; mode: string; overall: string; river: string; rain_level: string; at_risk: number; alerts_created: number; error: string | null }
+export const listRuns = () => call<{ runs: RunSummary[] }>('/model/runs').then(r => r.runs)

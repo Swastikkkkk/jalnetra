@@ -120,6 +120,7 @@ function WarnBlock({ i }: { i: Incident }) {
   const [res, setRes] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [tel, setTel] = useState<Telephony | null>(null)
+  const [demo, setDemo] = useState(false)
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState({ name: '', role: 'sarpanch' as Contact['role'], phone: '+91', place_name: (i.details?.villages ?? [])[0] ?? '' })
   const load = () => { listContacts(i.lat, i.lng, 25).then(setContacts).catch(() => {}); listAlerts(i.id).then(setAlerts).catch(() => {}) }
@@ -128,8 +129,7 @@ function WarnBlock({ i }: { i: Incident }) {
   const send = async () => {
     setBusy(true); setRes(null)
     try {
-       if (picked.length === 0) { setRes('Select at least one real contact before sending.'); return }
-       const r = await sendAlerts(i.id, picked, msg, channel, { context: alertContext(i) })
+      const r = await sendAlerts(i.id, picked, msg, channel, { demo: demo && channel === 'call', context: alertContext(i) })
       const via = r.telephony === 'omnidimension' ? 'Hindi AI call placed via OmniDimension' : r.telephony === 'twilio' ? 'Sent via Twilio' : 'Logged only, no phone provider connected'
       setRes(`${via}. ` + r.results.map(x => `${x.contact}: ${x.status === 'sent' ? 'ringing now' : x.status}${x.error ? ` (${x.error})` : ''}`).join(' · '))
       load()
@@ -142,9 +142,8 @@ function WarnBlock({ i }: { i: Incident }) {
   const preview = () => { try { const u = new SpeechSynthesisUtterance(msg); u.lang = 'hi-IN'; speechSynthesis.cancel(); speechSynthesis.speak(u) } catch { /* no speech */ } }
   return (
     <>
-       <div className="kicker mt">Broadcast to nearby responders</div>
-       <p className="note">Select real contacts to broadcast this Hindi message to nearby sarpanchs, hospitals, ASHA workers, NGOs and local responders. Every call or SMS requires your approval.</p>
-       {contacts.length === 0 ? <p className="note">No contacts within 25 km yet. Add a sarpanch, hospital, ASHA worker, NGO or local responder before sending.</p> : (
+      <div className="kicker mt">Warn people nearby</div>
+      {contacts.length === 0 ? <p className="note">No contacts within 25 km yet. Add the sarpanch, ASHA worker or NGO for this area.</p> : (
         <ul className="clist">{contacts.map(c => (
           <li key={c.id}><label><input type="checkbox" checked={picked.includes(c.id)} onChange={e => setPicked(p => e.target.checked ? [...p, c.id] : p.filter(x => x !== c.id))} />
             <span><b>{c.name}</b> · {ROLE_LABEL[c.role]}, {c.place_name}<span className="imeta"> {c.phone} · {c.km?.toFixed(1)} km</span></span></label></li>
@@ -159,15 +158,16 @@ function WarnBlock({ i }: { i: Incident }) {
           <div className="acts"><button disabled={busy || !form.name || form.phone.length < 10 || !form.place_name} onClick={save}>Save contact</button><button className="ghost" onClick={() => setAdding(false)}>Cancel</button></div>
         </div>
       ) : <button className="link back" onClick={() => setAdding(true)}><FiPlus /> Add contact</button>}
+      {tel?.demo_phone && <label className="demo-row"><input type="checkbox" checked={demo} onChange={e => setDemo(e.target.checked)} /> <span>Also call demo phone <span className="imeta">{tel.demo_phone}</span></span></label>}
       {tel && <p className="imeta">Voice calls: {tel.call === 'omnidimension' ? 'OmniDimension Hindi agent (can answer questions)' : tel.call === 'twilio' ? 'Twilio text to speech' : 'not connected'}</p>}
       <textarea id="warn-msg" className="note-in msg" rows={5} value={msg} onChange={e => setMsg(e.target.value)} />
       <div className="acts">
         <div className="seg sm inline">{(['call', 'sms'] as const).map(c => <button key={c} className={channel === c ? 'on' : ''} onClick={() => setChannel(c)}>{c === 'call' ? 'Voice call' : 'SMS'}</button>)}</div>
         <button className="ghost" onClick={preview}><FiVolume2 /> Preview</button>
-        <button disabled={busy || picked.length === 0 || !msg.trim()} onClick={send}><FiPhoneCall /> {busy ? 'Sending…' : `Send to ${picked.length ? `${picked.length} selected` : 'selected contacts'}`}</button>
+        <button disabled={busy || (picked.length === 0 && !(demo && channel === 'call')) || !msg.trim()} onClick={send}><FiPhoneCall /> {busy ? 'Sending…' : `Send to ${picked.length + (demo && channel === 'call' ? 1 : 0) || 'selected'}`}</button>
       </div>
       {res && <p className="note">{res}</p>}
-      {alerts.length > 0 && <ul className="tl">{alerts.slice(0, 6).map(a => <li key={a.id}><b>{a.channel === 'call' ? 'Call' : 'SMS'} · {a.status === 'sent' ? 'sent' : a.status === 'failed' ? 'failed' : 'logged, not connected'}</b> · {a.jn_contacts?.name ?? 'Selected contact'} · {new Date(a.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</li>)}</ul>}
+      {alerts.length > 0 && <ul className="tl">{alerts.slice(0, 6).map(a => <li key={a.id}><b>{a.channel === 'call' ? 'Call' : 'SMS'} · {a.status === 'sent' ? 'sent' : a.status === 'failed' ? 'failed' : 'logged, not connected'}</b> · {a.jn_contacts?.name ?? 'Demo phone'} · {new Date(a.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</li>)}</ul>}
     </>
   )
 }
