@@ -3,8 +3,9 @@ import DeckGL from '@deck.gl/react'
 import { FlyToInterpolator, type MapViewState, type PickingInfo } from '@deck.gl/core'
 import { BitmapLayer, GeoJsonLayer, PathLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
 import { PathStyleExtension } from '@deck.gl/extensions'
+import { TileLayer } from '@deck.gl/geo-layers'
 import gsap from 'gsap'
-import { FiPause, FiPlay, FiRefreshCw, FiSkipForward, FiLayers, FiHome, FiCheckCircle, FiX, FiChevronDown, FiChevronRight, FiPhoneCall, FiExternalLink, FiAlertTriangle, FiRotateCcw } from 'react-icons/fi'
+import { FiMoreHorizontal, FiPause, FiPlay, FiRefreshCw, FiSkipForward, FiLayers, FiHome, FiCheckCircle, FiX, FiChevronDown, FiChevronRight, FiPhoneCall, FiExternalLink, FiAlertTriangle, FiRotateCcw } from 'react-icons/fi'
 import D from '../data.json'
 import s2 from '../img/s2.jpg'
 import o1 from '../img/o1.png'
@@ -47,8 +48,9 @@ export default function Live({ mode, onHome, onValidate, onOpenIncident, onMode 
   const [sel, setSel] = useState<number | null>(null)
   const [alerts, setAlerts] = useState<Record<number, AlertState>>({})
   const [events, setEvents] = useState<{ t: number; text: string; kind: 'info' | 'warn' | 'crit' | 'ok' }[]>([])
-  const [layers, setLayers] = useState({ sat: true, predicted: true, observed: mode === 'demo', villages: true, roads: false, shelters: true, route: true, rain: true, rivers: true })
+  const [layers, setLayers] = useState({ sat: false, predicted: true, observed: mode === 'demo', villages: true, roads: false, shelters: false, route: true, rain: false, rivers: true })
   const [showLayers, setShowLayers] = useState(false)
+  const [menu, setMenu] = useState(false)
   const [detail, setDetail] = useState(false)
   const [running, setRunning] = useState(false)
   const prev = useRef<ModelRun | null>(null)
@@ -147,8 +149,10 @@ export default function Live({ mode, onHome, onValidate, onOpenIncident, onMode 
   // ---- map layers
   const L: any[] = []
   const tb = terrain ? bounds(terrain) : null
-  L.push(new GeoJsonLayer({ id: 'countries', data: countries as any, filled: true, stroked: true, getFillColor: [16, 19, 24], getLineColor: [70, 78, 92], lineWidthMinPixels: 1 }))
-  if (layers.sat) L.push(new BitmapLayer({ id: 's2', image: s2, bounds: ((D as any).s2bounds ?? D.bounds) as any, opacity: 0.9 }))
+  L.push(new TileLayer({ id: 'basemap', data: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', minZoom: 0, maxZoom: 17, tileSize: 256,
+    renderSubLayers: (p: any) => { const b = p.tile.boundingBox; return new BitmapLayer(p, { data: undefined, image: p.data, bounds: [b[0][0], b[0][1], b[1][0], b[1][1]], desaturate: 0.2, tintColor: [188, 192, 200] }) } }))
+  L.push(new GeoJsonLayer({ id: 'countries', data: countries as any, filled: false, stroked: true, getLineColor: [255, 255, 255, 70], lineWidthMinPixels: 1 }))
+  if (layers.sat) L.push(new BitmapLayer({ id: 's2', image: s2, bounds: ((D as any).s2bounds ?? D.bounds) as any, opacity: 0.85 }))
   if (layers.rivers) L.push(new PathLayer({ id: 'rivers', data: D.network, getPath: (d: any) => d, getColor: [125, 211, 252, 110], widthMinPixels: 1 }))
   if (layers.rivers) L.push(new PathLayer({ id: 'gandak', data: [{ path: D.river.path }], getPath: (d: any) => d.path, getColor: [186, 230, 253, 200], widthUnits: 'pixels', getWidth: 2.4 }))
   if (layers.observed && mode === 'demo') {
@@ -172,51 +176,53 @@ export default function Live({ mode, onHome, onValidate, onOpenIncident, onMode 
   }
   if (layers.villages) L.push(new ScatterplotLayer({
     id: 'villages', data: VILLAGES, getPosition: (d: any) => [d.lng, d.lat], radiusUnits: 'pixels',
-    getRadius: (d: any) => { const l = risk.get(d.id)?.levelAt[h] ?? 'LOW'; return d.id === sel ? 9 : l === 'LOW' ? 2.8 : l === 'MEDIUM' ? 4.5 : 6 },
-    getFillColor: (d: any) => [...LEVEL_RGB[risk.get(d.id)?.levelAt[h] ?? 'LOW'], 245] as any, stroked: true,
-    getLineColor: (d: any) => (d.id === sel ? [255, 255, 255, 255] : [8, 10, 14, 220]), lineWidthMinPixels: 1.2, pickable: true,
+    getRadius: (d: any) => { const l = risk.get(d.id)?.levelAt[h] ?? 'LOW'; return d.id === sel ? 9 : l === 'LOW' ? 2.2 : l === 'MEDIUM' ? 4.5 : 6 },
+    getFillColor: (d: any) => { const l = risk.get(d.id)?.levelAt[h] ?? 'LOW'; return [...LEVEL_RGB[l], l === 'LOW' ? 150 : 245] as any }, stroked: true,
+    getLineColor: (d: any) => (d.id === sel ? [255, 255, 255, 255] : [8, 10, 14, 120]), lineWidthMinPixels: 1, pickable: true,
     onClick: (i: PickingInfo) => pick((i.object as any).id), updateTriggers: { getFillColor: [run?.now, h], getRadius: [run?.now, h, sel], getLineColor: sel },
   }))
   if (layers.villages && (view.zoom ?? 0) >= 9.4) L.push(new TextLayer({ id: 'vt', data: VILLAGES.filter(v => (risk.get(v.id)?.levelAt[h] ?? 'LOW') !== 'LOW' || v.id === sel), getPosition: (d: any) => [d.lng, d.lat], getText: (d: any) => d.name, getSize: 11, getPixelOffset: [9, 0], getTextAnchor: 'start', getColor: [241, 245, 249, 235], fontFamily: FONT, fontWeight: 500, characterSet: 'auto', outlineWidth: 3, outlineColor: [0, 0, 0, 210], fontSettings: { sdf: true }, updateTriggers: { getText: [run?.now, h] } }))
   if (run) {
     const sd = M.stations.map((s, i) => ({ ...s, f: run.stations[i] }))
-    L.push(new ScatterplotLayer({ id: 'stations', data: sd, getPosition: (d: any) => [d.lng, d.lat], getRadius: 5, radiusUnits: 'pixels', getFillColor: [255, 255, 255], stroked: true, getLineColor: [15, 23, 42], lineWidthMinPixels: 1.5 }))
-    L.push(new TextLayer({ id: 'st-t', data: sd, getPosition: (d: any) => [d.lng, d.lat], getText: (d: any) => `${d.label}  ${fmtQ(d.f.q[72 + h])} m³/s${d.f.trend.startsWith('Rising') ? ' ↑' : d.f.trend === 'Falling' ? ' ↓' : ''}`, getSize: 12, getPixelOffset: [10, 0], getTextAnchor: 'start', getColor: [255, 255, 255], fontFamily: FONT, fontWeight: 600, characterSet: 'auto', outlineWidth: 4, outlineColor: [0, 0, 0, 220], fontSettings: { sdf: true }, updateTriggers: { getText: [run.now, h] } }))
+    L.push(new ScatterplotLayer({ id: 'stations', data: sd, pickable: true, getPosition: (d: any) => [d.lng, d.lat], getRadius: 4.5, radiusUnits: 'pixels', getFillColor: [255, 255, 255], stroked: true, getLineColor: [15, 23, 42], lineWidthMinPixels: 1.5 }))
+    L.push(new TextLayer({ id: 'st-t', data: sd, getPosition: (d: any) => [d.lng, d.lat], getText: (d: any) => d.label.replace(' barrage', '').replace(', Nepal', ''), getSize: 12.5, getPixelOffset: [10, 0], getTextAnchor: 'start', getColor: [255, 255, 255], fontFamily: FONT, fontWeight: 600, characterSet: 'auto', outlineWidth: 4, outlineColor: [0, 0, 0, 220], fontSettings: { sdf: true }, updateTriggers: { getText: [run.now, h] } }))
   }
 
   const secs = Math.max(0, Math.round((nextAt - clock) / 1000))
   const simLabel = mode === 'demo' ? fmtIST(sim) : null
+  const hzWord = h === 0 ? 'right now' : `in the next ${h} hours`
+  const statusText = run ? `River ${run.river.toLowerCase()}. ${atRiskH ? `${atRiskH} village${atRiskH === 1 ? '' : 's'} at risk ${hzWord}.` : `No village at risk ${hzWord}.`}${queue.length ? ` ${queue.length} call${queue.length === 1 ? '' : 's'} waiting for approval.` : ''}` : ''
   const tick = (k: keyof typeof layers) => setLayers(s => ({ ...s, [k]: !s[k] }))
 
   return (
     <div className={'app live ' + mode} style={{ ['--top' as any]: `${topH + 18}px` }}>
       <DeckGL viewState={view} onViewStateChange={(e: any) => setView(e.viewState)} controller layers={L} getCursor={({ isHovering }) => (isHovering ? 'pointer' : 'grab')}
-        getTooltip={({ object, layer }: any) => !object ? null : layer?.id === 'villages' ? { text: `${object.name} · ${risk.get(object.id)?.levelAt[h] ?? 'LOW'} at ${HLABEL[h]}` } : layer?.id === 'pois' ? { text: `${object.n} (${object.a === 'h' ? 'hospital' : 'school / college'})` } : null} />
+        getTooltip={({ object, layer }: any) => !object ? null : layer?.id === 'villages' ? { text: `${object.name} · ${risk.get(object.id)?.levelAt[h] ?? 'LOW'} at ${HLABEL[h]}` } : layer?.id === 'pois' ? { text: `${object.n} (${object.a === 'h' ? 'hospital' : 'school / college'})` } : layer?.id === 'stations' ? { text: `${object.label}: ${fmtQ(object.f.q[72 + h])} m³/s, ${object.f.trend.toLowerCase()}` } : null} />
 
       <div className="ltop" ref={topRef}>
-      {/* ---------- status bar ---------- */}
-      <header className="lbar">
-        <button className="lb-home" onClick={onHome} aria-label="Home"><FiHome /></button>
-        <div className="lb-brand"><div className="eyebrow">JalNetra · Gandak basin</div><div className="title">Live flood intelligence</div></div>
-        <div className={'modebadge ' + mode}>{mode === 'live' ? <><i className="dot" />LIVE</> : <><i className="dot" />LIVE DEMO SIMULATION</>}</div>
-        {run && <>
-          <Stat k="River" v={run.river.toUpperCase()} tone={run.river.startsWith('Rising') ? 'warn' : 'ok'} />
-          {detail && <Stat k="Rain" v={run.rainMissing ? 'NO DATA' : run.rainLevel} tone={run.rainLevel === 'HIGH' ? 'warn' : 'ok'} />}
-          {detail && <Stat k="Overall risk" v={run.overall} tone={run.overall === 'LOW' ? 'ok' : run.overall === 'MEDIUM' ? 'mid' : 'warn'} />}
-          <Stat k={`Villages at risk ${HLABEL[h]}`} v={<><Count n={atRiskH} /> <span className="dim">/ 291</span></>} tone={atRiskH ? 'warn' : 'ok'} />
-          {detail && <div className="lb-levels"><span className="lv CRITICAL">{counts.CRITICAL} critical</span><span className="lv HIGH">{counts.HIGH} high</span><span className="lv MEDIUM">{counts.MEDIUM} medium</span></div>}
-        </>}
-        <div className="lb-time">
-          <div><span className="dim">LAST UPDATED</span> {lastAt ? fmtIST(lastAt, false) + ':' + String(new Date(lastAt).getSeconds()).padStart(2, '0') : '...'}</div>
-          <div><span className="dim">NEXT MODEL RUN</span> {mode === 'demo' && paused ? 'paused' : `${fmtIST(nextAt, false)} · ${secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`}`}</div>
-          {simLabel && <div className="simclock"><span className="dim">SIMULATED CLOCK</span> {simLabel}</div>}
+      <div className="lv-row">
+        <section className="lv-card">
+          <div className="lv-head">
+            <button className="lv-icon" onClick={onHome} aria-label="Home"><FiHome /></button>
+            <div className="lv-name"><div className="lv-title">Gandak</div><div className="lv-sub">{mode === 'demo' ? 'Replaying the September 2026 flood' : 'Nepal to Bihar · 291 villages'}</div></div>
+          </div>
+          {run ? <>
+            <p className="lv-status"><i className={'lv-dot ' + (atRiskH || run.river.startsWith('Rising') ? 'warn' : 'ok')} />{statusText}</p>
+            <p className="lv-meta">{mode === 'demo' ? `${simLabel}${paused ? ' · paused' : ` · next step in ${secs}s`}` : `Updated ${lastAt ? fmtIST(lastAt, false) : '…'} · next check in ${secs >= 60 ? `${Math.floor(secs / 60)} min` : `${secs}s`}`}</p>
+          </> : !err && <p className="lv-meta"><FiRefreshCw className="spin" /> Reading river data…</p>}
+        </section>
+        <div className="lv-actions">
+          <div className="seg lv-seg"><button className={mode === 'live' ? 'on' : ''} onClick={() => onMode('live')}>Live</button><button className={mode === 'demo' ? 'on' : ''} onClick={() => onMode('demo')}>Replay</button></div>
+          <div className="lv-more">
+            <button className="lv-icon" aria-label="More" onClick={() => setMenu(m => !m)}><FiMoreHorizontal /></button>
+            {menu && <div className="lv-menu" onClick={() => setMenu(false)}>
+              <button onClick={() => setDetail(d => !d)}>{detail ? 'Hide details' : 'Show details'}</button>
+              <button onClick={() => setShowLayers(x => !x)}><FiLayers /> Map layers</button>
+              <button onClick={onValidate}>2026 validation</button>
+            </div>}
+          </div>
         </div>
-        <div className="lb-btns">
-          <div className="seg"><button className={mode === 'live' ? 'on' : ''} onClick={() => onMode('live')}>Live</button><button className={mode === 'demo' ? 'on' : ''} onClick={() => onMode('demo')}>Demo</button></div>
-          <button className="storybtn" onClick={() => setDetail(d => !d)}>{detail ? 'Simple view' : 'Show details'}</button>
-          <button className="storybtn" onClick={onValidate}>2026 validation</button>
-        </div>
-      </header>
+      </div>
 
       {/* ---------- pipeline ---------- */}
       {detail && <div className="pipe" ref={pipeRef} aria-label="Prediction pipeline">
@@ -253,7 +259,7 @@ export default function Live({ mode, onHome, onValidate, onOpenIncident, onMode 
       </aside>}
 
       {/* ---------- right: alert queue or village ---------- */}
-      {run && <aside className="lpanel right">
+      {run && (selR || queue.length > 0 || detail) && <aside className="lpanel right">
         {selR ? <VillagePanel r={selR} route={routes.get(selR.id) ?? null} run={run} mode={mode} h={h} st={alerts[selR.id]} setSt={s => setAlerts(a => ({ ...a, [selR.id]: { ...(a[selR.id] ?? {}), ...s } as AlertState }))} onClose={() => setSel(null)} onOpenIncident={onOpenIncident} />
           : <AlertQueue queue={queue} alerts={alerts} onView={pick} onDismiss={id => setAlerts(a => ({ ...a, [id]: { stage: 'dismissed' } }))} onOpenIncident={onOpenIncident} mode={mode} />}
         {stats && detail && <section>
@@ -269,24 +275,20 @@ export default function Live({ mode, onHome, onValidate, onOpenIncident, onMode 
         </section>}
       </aside>}
 
-      {/* ---------- bottom: horizon + controls + events ---------- */}
-      <footer className="lfoot">
-        <div className="hz" role="group" aria-label="Forecast horizon">
-          {HORIZONS.map(x => <button key={x} className={h === x ? 'on' : ''} onClick={() => setH(x)}>{HLABEL[x]}<small>{run ? `${(run.counts[x].MEDIUM + run.counts[x].HIGH + run.counts[x].CRITICAL)} vil.` : ''}</small></button>)}
-          <button className="play" aria-label="Play forecast" onClick={() => { let k = 0; const id = setInterval(() => { setH(HORIZONS[k]); k++; if (k >= HORIZONS.length) clearInterval(id) }, 900) }}><FiPlay /> Play</button>
+      <footer className="lv-dock">
+        <div className="lv-hz" role="group" aria-label="Forecast horizon">
+          {HORIZONS.map(x => { const n = run ? run.counts[x].MEDIUM + run.counts[x].HIGH + run.counts[x].CRITICAL : 0; return <button key={x} className={h === x ? 'on' : ''} onClick={() => setH(x)}>{x === 0 ? 'Now' : `+${x}h`}{n > 0 && <b>{n}</b>}</button> })}
         </div>
-        <div className="ctrl">
-          {mode === 'demo' && <>
-            <button onClick={() => setPaused(p => !p)}>{paused ? <><FiPlay /> Resume</> : <><FiPause /> Pause</>}</button>
-            <button onClick={runNow} disabled={running}><FiSkipForward /> +3 h now</button>
-            <div className="seg"><button className={period === 30 ? 'on' : ''} onClick={() => { setPeriod(30); setNextAt(Date.now() + 30000) }}>30 s</button><button className={period === 8 ? 'on' : ''} onClick={() => { setPeriod(8); setNextAt(Date.now() + 8000) }}>8 s</button></div>
-            <button onClick={restart}><FiRotateCcw /> Restart</button>
-          </>}
-          {mode === 'live' && <button onClick={runNow} disabled={running}><FiRefreshCw className={running ? 'spin' : ''} /> Run model now</button>}
-          <button onClick={() => setShowLayers(s => !s)}><FiLayers /> Layers</button>
-        </div>
-        <ol className={'feed' + (detail ? '' : ' hide')}>{events.slice(0, 4).map((e, i) => <li key={i} className={e.kind}><span className="dim">{fmtIST(e.t, mode === 'demo')}</span> {e.text}</li>)}</ol>
+        <span className="lv-sep" />
+        {mode === 'demo' ? <>
+          <button className="lv-icon" aria-label={paused ? 'Play' : 'Pause'} onClick={() => setPaused(p => !p)}>{paused ? <FiPlay /> : <FiPause />}</button>
+          <button className="lv-icon" aria-label="Skip 3 hours" onClick={runNow} disabled={running}><FiSkipForward /></button>
+          <button className="lv-icon" aria-label="Restart" onClick={restart}><FiRotateCcw /></button>
+          <button className="lv-speed" aria-label="Speed" onClick={() => { const n = period === 30 ? 8 : 30; setPeriod(n); setNextAt(Date.now() + n * 1000) }}>{period === 8 ? '4×' : '1×'}</button>
+        </> : <button className="lv-icon" aria-label="Run model now" onClick={runNow} disabled={running}><FiRefreshCw className={running ? 'spin' : ''} /></button>}
       </footer>
+      {detail && <ol className="feed lv-feed">{events.slice(0, 4).map((e, i) => <li key={i} className={e.kind}><span className="dim">{fmtIST(e.t, mode === 'demo')}</span> {e.text}</li>)}</ol>}
+      <div className="lv-attr">Imagery Esri, Maxar · River GloFAS · Terrain Copernicus DEM</div>
       {showLayers && <div className="lpop">
         {([['predicted', mode === 'demo' ? 'Simulated prediction' : 'Predicted flood'], ['observed', mode === 'demo' ? 'Observed flood (Sentinel-1, 2026)' : 'Last radar flood map (3 Oct)'], ['villages', 'Village risk'], ['route', 'Evacuation route'], ['shelters', 'Schools, hospitals'], ['roads', 'Roads'], ['rain', 'Rainfall (48 h)'], ['rivers', 'Rivers'], ['sat', 'Satellite imagery']] as const).map(([k, l]) => <label key={k} className="tg"><input type="checkbox" checked={layers[k]} onChange={() => tick(k)} /><span>{l}</span></label>)}
         <div className="legend2">
@@ -297,15 +299,6 @@ export default function Live({ mode, onHome, onValidate, onOpenIncident, onMode 
       </div>}
     </div>
   )
-}
-
-function Stat({ k, v, tone }: { k: string; v: React.ReactNode; tone: 'ok' | 'mid' | 'warn' }) {
-  return <div className={'lstat ' + tone}><div className="k">{k}</div><div className="v">{v}</div></div>
-}
-function Count({ n }: { n: number }) {
-  const ref = useRef<HTMLSpanElement>(null), last = useRef(n)
-  useEffect(() => { const o = { v: last.current }; gsap.to(o, { v: n, duration: 0.8, ease: 'power2.out', onUpdate: () => { if (ref.current) ref.current.textContent = String(Math.round(o.v)) } }); last.current = n }, [n])
-  return <span ref={ref}>{n}</span>
 }
 
 function Forecast({ run }: { run: ModelRun }) {
