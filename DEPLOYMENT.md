@@ -15,7 +15,10 @@ Import the project into Vercel with:
 - **Output directory:** `dist`
 - **Root directory:** `jalnetra-flood-map` (when importing the parent folder)
 
-`vercel.json` runs the radar worker every 15 minutes at `/api/cron/radar-alerts`.
+The radar endpoint is available at `/api/cron/radar-alerts`, but it is not declared as a
+Vercel Cron job because Vercel Hobby projects reject schedules more frequent than once per
+day. Run the 15-minute radar schedule from the existing Supabase scheduler (or move the
+project to a Vercel plan that supports minute-level cron schedules).
 
 ## 2. Configure environment variables
 
@@ -29,7 +32,7 @@ Set these in the Vercel project settings for Production:
 | `JALNETRA_KEY` | Operator key used only by the cron worker |
 | `CRON_SECRET` | Random secret; required by the cron endpoint |
 | `RADAR_FEED_URL` | HTTPS JSON feed containing the latest radar detections |
-| `JALNETRA_ALERT_CONTACT_IDS` | Optional comma-separated contact IDs. If empty, the configured demo phone is called. |
+| `JALNETRA_ALERT_CONTACT_IDS` | Optional comma-separated contact IDs for the configured alert workflow. |
 
 The browser never receives `JALNETRA_KEY` or `CRON_SECRET`. Do not use an operator key as
 `VITE_JALNETRA_KEY` on a public deployment.
@@ -72,5 +75,5 @@ curl https://YOUR_DOMAIN/health
 curl -H "Authorization: Bearer $CRON_SECRET" https://YOUR_DOMAIN/api/cron/radar-alerts
 ```
 
-The second request should return `{ "processed": ... }`. Vercel Cron invokes the same
-endpoint automatically after the deployment is live.
+The second request should return `{ "processed": ... }`. The external scheduler should invoke
+the same endpoint every 15 minutes after the deployment is live.
