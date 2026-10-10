@@ -20,7 +20,7 @@ const parseHash = (h: string): Screen | null => {
 }
 
 const parsePath = (pathname: string): Screen | null => {
-  const path = pathname.replace(/\/$/, '') || '/'
+  const path = pathname.replace(/\/$/, '').toLowerCase() || '/'
   if (path === '/home') return { s: 'home' }
   if (path === '/river-watch') return { s: 'rivers' }
   if (path === '/gandak') return { s: 'live', mode: 'live' }
@@ -61,7 +61,7 @@ export default function Root() {
   const home = () => go({ s: 'home' }), live = () => go({ s: 'live', mode: 'live' }), validate = () => go({ s: 'validate' })
   if (scr.s === 'rivers') return <RiverWatch onHome={home} onGandak={live} onDemo={() => go({ s: 'live', mode: 'demo' })} />
   if (scr.s === 'story') return <Story onHome={home} onRivers={() => go({ s: 'rivers' })} onLive={live} />
-  if (scr.s === 'home') return <Home onRivers={() => go({ s: 'rivers' })} onLive={live} onDemo={() => go({ s: 'live', mode: 'demo' })} onValidate={validate} onOps={() => go({ s: 'history', start: 'ops' })} onStory={() => go({ s: 'story' })} />
+  if (scr.s === 'home') return <Home onRivers={() => go({ s: 'rivers' })} onLive={live} onDemo={() => go({ s: 'live', mode: 'demo' })} onMap={() => go({ s: 'history', start: 'explore' })} onValidate={validate} onOps={() => go({ s: 'history', start: 'ops' })} onStory={() => go({ s: 'story' })} />
   if (scr.s === 'live') return <Live key="live" mode={scr.mode} onMode={m => go({ s: 'live', mode: m })} onHome={home} onValidate={validate} onOpenIncident={id => go({ s: 'history', start: 'ops', incident: id })} />
   if (scr.s === 'validate') return <Validate onBack={home} onLive={live} onStory={() => go({ s: 'story' })} />
   return <App key={scr.start + (scr.incident ?? '')} start={scr.start} incidentId={scr.incident ?? null} onHome={home} onValidate={validate} onLive={live} onStory={() => go({ s: 'story' })} />

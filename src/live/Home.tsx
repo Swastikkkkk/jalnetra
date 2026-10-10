@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import gsap from 'gsap'
-import { FiArrowRight, FiActivity, FiPlayCircle, FiClock, FiList, FiRefreshCw } from 'react-icons/fi'
+import { FiArrowRight, FiActivity, FiPlayCircle, FiList, FiMap, FiCheckCircle, FiRefreshCw } from 'react-icons/fi'
 import { fmtIST } from './shared'
 
 type Pub = { river: { created_at: string; points: number; normal: number; rising: number; warning: number; danger: number; headline: string; flagged: { river: string; near: string; status: string; trend?: string }[] } | null; gandak: { created_at: string; river: string; at_risk: number; overall: string } | null }
-export default function Home({ onRivers, onLive, onDemo, onValidate, onOps, onStory }: { onRivers: () => void; onLive: () => void; onDemo: () => void; onValidate: () => void; onOps: () => void; onStory: () => void }) {
+export default function Home({ onRivers, onLive, onDemo, onMap, onValidate, onOps, onStory }: { onRivers: () => void; onLive: () => void; onDemo: () => void; onMap: () => void; onValidate: () => void; onOps: () => void; onStory: () => void }) {
   const [pub, setPub] = useState<Pub | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -24,7 +24,11 @@ export default function Home({ onRivers, onLive, onDemo, onValidate, onOps, onSt
           <div className="hbtns rv"><button className="primary" onClick={onStory}><FiPlayCircle /> Watch the glacier story</button><button onClick={onLive}><FiActivity /> See Gandak live</button></div>
           <div className="flow rv"><span><b>01</b> DETECT</span><FiArrowRight /><span><b>02</b> PREDICT</span><FiArrowRight /><span><b>03</b> APPROVE</span></div>
           <div className="operator-guard rv"><strong>Human approval is the safeguard.</strong><span>No automatic calls are placed. An operator reviews every alert before a Hindi call can go out.</span></div>
-          <div className="hlinks rv"><button className="link" onClick={onValidate}><FiClock /> Validation</button><button className="link" onClick={onOps}><FiList /> Operations</button></div>
+          <div className="hlinks rv" aria-label="JalNetra tools">
+            <button className="action-tile" onClick={onMap}><FiMap /><span><b>Technical map</b><small>Explore the evidence</small></span><FiArrowRight /></button>
+            <button className="action-tile" onClick={onOps}><FiList /><span><b>Operator dashboard</b><small>Review incidents</small></span><FiArrowRight /></button>
+            <button className="action-tile" onClick={onValidate}><FiCheckCircle /><span><b>Validation</b><small>See model performance</small></span><FiArrowRight /></button>
+          </div>
         </main>
         <div className="hr rv">
             <div className="kicker live">Public monitor · right now</div>

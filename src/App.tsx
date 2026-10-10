@@ -5,7 +5,7 @@ import { FlyToInterpolator, LinearInterpolator, WebMercatorViewport, type MapVie
 import { BitmapLayer, GeoJsonLayer, PathLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
 import { TripsLayer } from '@deck.gl/geo-layers'
 import { PathStyleExtension } from '@deck.gl/extensions'
-import { FiPlay, FiPause, FiSkipBack, FiSkipForward, FiX, FiNavigation, FiVolume2, FiArrowRight, FiArrowLeft, FiMap, FiRotateCcw } from 'react-icons/fi'
+import { FiPlay, FiPause, FiSkipBack, FiSkipForward, FiX, FiNavigation, FiVolume2, FiArrowRight, FiArrowLeft, FiMap, FiList, FiCheckCircle, FiRotateCcw } from 'react-icons/fi'
 import D from './data.json'
 import s2 from './img/s2.jpg'
 import o1 from './img/o1.png'
@@ -364,6 +364,11 @@ export default function App({ start = 'story', incidentId = null, onHome, onVali
                   <div><span className="guard-dot" /> Operator approval stays human</div>
                   <p>Review the signal and wording before anything is sent.</p>
                   <button onClick={openOps}>Open operator dashboard <FiArrowRight /></button>
+                </div>
+                <div className="landing-actions" aria-label="JalNetra tools">
+                  <button className="action-tile" onClick={explore}><FiMap /><span><b>Technical map</b><small>Explore the evidence</small></span><FiArrowRight /></button>
+                  <button className="action-tile" onClick={openOps}><FiList /><span><b>Operator dashboard</b><small>Review incidents</small></span><FiArrowRight /></button>
+                  <button className="action-tile" onClick={onValidate}><FiCheckCircle /><span><b>Validation</b><small>See model performance</small></span><FiArrowRight /></button>
                 </div>
               </section>
               <aside className="landing-signal landing-reveal" aria-label="JalNetra signal path">
