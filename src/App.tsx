@@ -3,7 +3,7 @@ import gsap from 'gsap'
 import DeckGL from '@deck.gl/react'
 import { FlyToInterpolator, LinearInterpolator, WebMercatorViewport, type MapViewState, type PickingInfo } from '@deck.gl/core'
 import { BitmapLayer, GeoJsonLayer, PathLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
-import { TripsLayer } from '@deck.gl/geo-layers'
+import { TileLayer, TripsLayer } from '@deck.gl/geo-layers'
 import { PathStyleExtension } from '@deck.gl/extensions'
 import { FiPlay, FiPause, FiSkipBack, FiSkipForward, FiX, FiNavigation, FiVolume2, FiArrowRight, FiArrowLeft, FiMap, FiList, FiCheckCircle, FiRotateCcw } from 'react-icons/fi'
 import D from './data.json'
@@ -18,6 +18,8 @@ import OpsPanel, { useIncidents } from './OpsPanel'
 import type { Incident } from './ops'
 import { BentoGrid, BentoGridItem } from './components/ui/bento-grid'
 import { Spotlight } from './components/ui/spotlight'
+import { AppBrand } from './components/AppBrand'
+import { API } from './ops'
 
 type V = (typeof D.villages)[number]
 type State = 'affected' | 'atrisk' | 'watch' | 'safe'
@@ -64,8 +66,8 @@ async function fetchLive(): Promise<typeof LIVE | null> {
   try {
     const S = LIVE.stations
     const pts = [[27.725006, 84.375], [27.575005, 84.07501], [26.975006, 84.125], [26.475006, 84.475006], [25.975006, 84.975006], [25.875, 85.07501], [25.775002, 85.125]]
-    const fu = `https://flood-api.open-meteo.com/v1/flood?latitude=${pts.map(p => p[0]).join(',')}&longitude=${pts.map(p => p[1]).join(',')}&daily=river_discharge,river_discharge_max,river_discharge_min&past_days=7&forecast_days=10`
-    const ru = `https://api.open-meteo.com/v1/forecast?latitude=${LIVE.rain.map(r => r.lat).join(',')}&longitude=${LIVE.rain.map(r => r.lng).join(',')}&daily=precipitation_sum&forecast_days=7&timezone=UTC`
+    const fu = `${API}/proxy/flood?latitude=${pts.map(p => p[0]).join(',')}&longitude=${pts.map(p => p[1]).join(',')}&daily=river_discharge,river_discharge_max,river_discharge_min&past_days=7&forecast_days=10`
+    const ru = `${API}/proxy/forecast?latitude=${LIVE.rain.map(r => r.lat).join(',')}&longitude=${LIVE.rain.map(r => r.lng).join(',')}&daily=precipitation_sum&forecast_days=7&timezone=UTC`
     const [f, r] = await Promise.all([fetch(fu).then(x => x.json()), fetch(ru).then(x => x.json())])
     const today = new Date().toISOString().slice(0, 10)
     const stations = S.map((s, i) => { const d = f[i].daily; const ti = Math.max(0, d.time.indexOf(today)); return { ...s, time: d.time, q: d.river_discharge, qmax: d.river_discharge_max, qmin: d.river_discharge_min, today: ti, fmax: Math.max(...d.river_discharge_max.slice(ti + 1)) } })
@@ -145,7 +147,9 @@ const STEPS: Step[] = [
     facts: [] },
 ]
 
-const INITIAL: MapViewState = { longitude: 84.45, latitude: 26.85, zoom: 7.7, pitch: 0, bearing: 0, minZoom: 6.2, maxZoom: 11.5 }
+const INITIAL: MapViewState = { longitude: 84.45, latitude: 26.85, zoom: 7.7, pitch: 0, bearing: 0, minZoom: 3.5, maxZoom: 15 }
+const ESRI_IMAGERY = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+const CARTO_LIGHT = ['a', 'b', 'c', 'd'].map(s => `https://${s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png`)
 
 export default function App({ start = 'story', incidentId = null, onHome, onValidate, onLive, onStory }: { start?: 'story' | 'explore' | 'ops'; incidentId?: string | null; onHome: () => void; onValidate: () => void; onLive: () => void; onStory: () => void }) {
   const [view, setView] = useState<MapViewState>(INITIAL)
@@ -164,6 +168,7 @@ export default function App({ start = 'story', incidentId = null, onHome, onVali
   const [opsSel, setOpsSel] = useState<string | null>(incidentId)
   const [step, setStep] = useState(0)
   const [normalOn, setNormalOn] = useState(false)
+  const [intro, setIntro] = useState(true)
   const [live, setLive] = useState<typeof LIVE>(LIVE)
   const landingRef = useRef<HTMLDivElement>(null)
   useEffect(() => { fetchLive().then(l => { if (l) setLive(l) }) }, [])
@@ -276,9 +281,13 @@ export default function App({ start = 'story', incidentId = null, onHome, onVali
 
   const tq = Math.round(t * 20)
   const L: any[] = []
-  L.push(new GeoJsonLayer({ id: 'countries', data: countries as any, filled: true, stroked: true, getFillColor: [16, 19, 24], getLineColor: [70, 78, 92], lineWidthMinPixels: 1 }))
-  L.push(new PathLayer({ id: 'network-map', data: D.network, getPath: (d: any) => d, getColor: [70, 110, 150], widthMinPixels: 1 }))
-  if (sat) L.push(new BitmapLayer({ id: 's2', image: s2, bounds: S2B }))
+  // Explore and operations get a real, zoomable basemap (satellite or street map). The story keeps its original dark canvas.
+  const showBase = phase === 'explore' || phase === 'ops'
+  if (showBase) L.push(new TileLayer({ id: 'basemap', data: sat ? ESRI_IMAGERY : CARTO_LIGHT, minZoom: 0, maxZoom: 17, tileSize: 256,
+    renderSubLayers: (p: any) => { const b = p.tile.boundingBox; return new BitmapLayer(p, { data: undefined, image: p.data, bounds: [b[0][0], b[0][1], b[1][0], b[1][1]] }) } }))
+  L.push(new GeoJsonLayer({ id: 'countries', data: countries as any, filled: !showBase, stroked: true, getFillColor: [16, 19, 24], getLineColor: showBase ? (sat ? [255, 255, 255, 90] : [60, 70, 64, 150]) : [70, 78, 92], lineWidthMinPixels: 1, updateTriggers: { getLineColor: [showBase, sat] } }))
+  L.push(new PathLayer({ id: 'network-map', data: D.network, getPath: (d: any) => d, getColor: showBase && !sat ? [29, 111, 184, 150] : [70, 110, 150], widthMinPixels: 1, updateTriggers: { getColor: [showBase, sat] } }))
+  if (sat && !showBase) L.push(new BitmapLayer({ id: 's2', image: s2, bounds: S2B }))
   if (normalOn) L.push(new BitmapLayer({ id: 'normal', image: normalImg, bounds: BOUNDS, opacity: 0.9 }))
   if (layers.corridor) L.push(new BitmapLayer({ id: 'corridor', image: corridorImg, bounds: BOUNDS, opacity: sat ? 0.7 : 0.8 }))
   if (layers.roads) L.push(new PathLayer({
@@ -302,7 +311,7 @@ export default function App({ start = 'story', incidentId = null, onHome, onVali
     L.push(new TextLayer({ id: 'rain-t', data: rd, getPosition: (d: any) => [d.lng, d.lat], getText: (d: any) => (d.mm >= 1 ? `${Math.round(d.mm)} mm` : ''), getSize: 14, getColor: [224, 242, 254], fontFamily: FONT, fontWeight: 600, outlineWidth: 3, outlineColor: [0, 0, 0, 200], fontSettings: { sdf: true }, updateTriggers: { getText: Math.floor(t) } }))
   }
   if (mode === 'today') {
-    L.push(new ScatterplotLayer({ id: 'rainf', data: live.rain, getPosition: (d: any) => [d.lng, d.lat], getRadius: (d: any) => 3000 + d.next7 * 120, stroked: true, getFillColor: [147, 197, 253, 25], getLineColor: [191, 219, 254, 170], getDashArray: [4, 3], lineWidthMinPixels: 1 }))
+    L.push(new ScatterplotLayer({ id: 'rainf', data: live.rain, getPosition: (d: any) => [d.lng, d.lat], getRadius: (d: any) => 3000 + d.next7 * 120, stroked: true, getFillColor: [147, 197, 253, 25], getLineColor: [191, 219, 254, 170], lineWidthMinPixels: 1 }))
     L.push(new TextLayer({ id: 'rainf-t', data: live.rain, getPosition: (d: any) => [d.lng, d.lat], getText: (d: any) => `${Math.round(d.next7)} mm next 7 days`, getSize: 12, getColor: [224, 242, 254], fontFamily: FONT, fontWeight: 600, outlineWidth: 3, outlineColor: [0, 0, 0, 200], fontSettings: { sdf: true } }))
   }
   if (layers.shelters) L.push(new ScatterplotLayer({ id: 'shelters', data: D.shelters, getPosition: (d: any) => [d.lng, d.lat], getRadius: 4.5, radiusUnits: 'pixels', getFillColor: [52, 211, 153], stroked: true, getLineColor: [6, 30, 22], lineWidthMinPixels: 1, pickable: true }))
@@ -331,7 +340,7 @@ export default function App({ start = 'story', incidentId = null, onHome, onVali
   }
 
   if (phase === 'ops') {
-    for (let k = L.length - 1; k >= 0; k--) if (!['countries', 'network-map', 's2', 'river-base', 'flow0', 'flow2000', 'labels', 'stations'].includes(L[k].id)) L.splice(k, 1)
+    for (let k = L.length - 1; k >= 0; k--) if (!['basemap', 'countries', 'network-map', 's2', 'river-base', 'flow0', 'flow2000', 'labels', 'stations'].includes(L[k].id)) L.splice(k, 1)
     const SEV: Record<string, [number, number, number]> = { high: [248, 113, 113], medium: [245, 158, 11], low: [253, 224, 71] }
     L.push(new ScatterplotLayer({ id: 'incidents', data: inc.items, getPosition: (d: Incident) => [d.lng, d.lat], radiusUnits: 'pixels', getRadius: (d: Incident) => (d.id === opsSel ? 11 : 7),
       getFillColor: (d: Incident) => [...SEV[d.severity], ['verified', 'rejected'].includes(d.status) ? 90 : 240] as any, stroked: true, getLineColor: (d: Incident) => (d.id === opsSel ? [255, 255, 255] : [10, 12, 16]), lineWidthMinPixels: 1.5,
@@ -410,30 +419,41 @@ export default function App({ start = 'story', incidentId = null, onHome, onVali
         </aside>
       )}
       {phase === 'ops' && (<>
-        <header className="top"><button className="storybtn" onClick={onHome}>Home</button><div className="brand"><div className="eyebrow">JalNetra · operator dashboard</div><div className="title">Incidents from every JalNetra part</div></div><button className="storybtn" onClick={onLive}>Live prediction</button></header>
+        <header className="top map-top"><AppBrand onClick={onHome} /><div className="brand"><div className="eyebrow">Incident log</div><div className="title">Incidents from every JalNetra part</div></div><span className="map-spacer" /><button className="storybtn" onClick={onLive}>Live prediction</button></header>
         <OpsPanel inc={inc} selId={opsSel} onSelect={selectInc} onBack={onLive} />
       </>)}
       {phase === 'explore' && (<>
-      <header className="top">
+      <header className="top map-top">
+        <AppBrand onClick={onHome} />
         <div className="brand">
-          <div className="eyebrow">JalNetra · Gandak corridor, Nepal to Bihar</div>
-          <div className="title">September 2026 flood · historical</div>
+          <div className="eyebrow">Gandak corridor, Nepal to Bihar</div>
+          <div className="title">September 2026 flood · historical replay</div>
         </div>
-        <div className="seg" aria-label="Mode">
-          <button className={mode === 'early' ? 'on' : ''} onClick={() => setMode('early')}>Early warning</button>
-          <button className={mode === 'active' ? 'on' : ''} onClick={() => { setMode('active'); if (obsIdx < 0) setT(OBS[1].day + 0.01) }}>Active flood</button>
-          <button className={mode === 'today' ? 'on' : ''} onClick={() => { setMode('today'); setPlaying(false); setT(DAYS - 1) }}>Today</button>
+        <div className="seg" aria-label="What to show">
+          <button className={mode === 'early' ? 'on' : ''} title="Forecast view: river flow and rain in the days before the flood" onClick={() => setMode('early')}>Early warning</button>
+          <button className={mode === 'active' ? 'on' : ''} title="Satellite view: water that radar actually saw" onClick={() => { setMode('active'); if (obsIdx < 0) setT(OBS[1].day + 0.01) }}>Active flood</button>
         </div>
-        <button className="storybtn" onClick={onHome}>Home</button>
+        <span className="map-spacer" />
         <button className="storybtn" onClick={onStory}><FiRotateCcw /> Glacier story</button>
         <button className="storybtn" onClick={onValidate}>Validation</button>
         <button className="storybtn" onClick={onLive}>Live prediction</button>
-        <button className="storybtn" onClick={openOps}>Operations</button>
+        <button className="storybtn" onClick={openOps}>Incident log</button>
         <div className="seg" aria-label="Basemap">
           <button className={sat ? 'on' : ''} onClick={() => setSat(true)}>Satellite</button>
           <button className={!sat ? 'on' : ''} onClick={() => setSat(false)}>Map</button>
         </div>
       </header>
+      {intro && <section className="map-intro" aria-label="How to read this map">
+        <h2>What you are looking at</h2>
+        <p>The September 2026 Gandak flood, replayed from satellite and river data. Press play on the timeline to watch the water travel from Nepal into Bihar.</p>
+        <ul>
+          <li><i style={{ background: 'rgba(29,111,184,.8)' }} /> Blue: water seen by Sentinel-1 radar (Active flood)</li>
+          <li><i style={{ background: 'rgba(245,158,11,.7)' }} /> Orange: corridor where villages are at risk</li>
+          <li><i style={{ background: 'rgb(56,189,248)', borderRadius: 999 }} /> Dots: villages, coloured by status</li>
+        </ul>
+        <button onClick={() => setIntro(false)}>Got it</button>
+      </section>}
+      <div className="map-attr">{sat ? 'Imagery © Esri, Maxar, Earthstar' : '© OpenStreetMap contributors, © CARTO'}</div>
 
       <div className="toggles">
         {([['observed', 'Observed flood'], ['route', 'Expected pathway'], ['corridor', 'Risk corridor'], ['villages', 'Villages'], ['roads', 'Roads'], ['shelters', 'Schools, hospitals']] as const).map(([k, l]) => (

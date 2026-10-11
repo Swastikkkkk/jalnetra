@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import DeckGL from '@deck.gl/react'
 import { FlyToInterpolator, WebMercatorViewport, type MapViewState } from '@deck.gl/core'
 import { BitmapLayer, GeoJsonLayer, PathLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
+import { TileLayer } from '@deck.gl/geo-layers'
 import { FiArrowLeft, FiArrowRight, FiPlay, FiActivity } from 'react-icons/fi'
 import gsap from 'gsap'
 import A from '../aug.json'
@@ -35,53 +36,33 @@ const ptAt = (k: number): [number, number] => { let j = 0; while (j < KM.length 
 const GAUGE_T: Record<string, { off?: number; alert?: number }> = { gy: { off: mins('08:44') }, sy: { off: mins('08:50') }, be: { off: mins('09:20') }, ml: { alert: mins('11:20'), off: mins('11:43') }, dg: {} }
 const G = A.gauges.map(g => ({ ...PL[g.id], ...g }))
 
-type Step = { kicker: string; title: string; body: string; facts?: [string, string][]; view: Partial<MapViewState> | 'fit' | 'india'; t: number; play?: [number, number]; images?: boolean; chart?: boolean; india?: boolean; end?: boolean }
+type Stat = { v: string; l: string }
+type Step = { kicker: string; title: string; body: string; facts?: Stat[]; view: Partial<MapViewState> | 'fit' | 'india'; t: number; play?: [number, number]; images?: boolean; india?: boolean; end?: boolean }
 const STEPS: Step[] = [
-  { kicker: '26 August 2026 · Nepal to India', title: 'A glacier fell, and the river carried it to India', view: 'fit', t: T0 - 1,
-    body: `At 08:37 on 26 August, ice and rock broke off Langtang Lirung on the Nepal and Tibet border. The surge ran down the Lhende Khola and the Trishuli, joined the Narayani at Devghat and reached the Gandak at Valmikinagar barrage, ${Math.round(VALM)} km downstream. This replays it with the official timeline, the river gauges and satellite images.`,
-    facts: [['Trigger', 'Glacier collapse, not rain'], ['Dead in Nepal', '939 (NDRRMA)'], ['Glacier to India', `${Math.round(VALM)} km of river`]] },
-  { kicker: '08:37 · The collapse', title: 'Ice and rock fall 1.2 km', view: { longitude: 85.47, latitude: 28.275, zoom: 11.6 }, t: T0, images: true,
-    body: 'About 0.2 km² of ice and rock fell roughly 1.2 km down the north face of Langtang Lirung. Seismometers recorded it as a magnitude 5.2 event, so large it was first logged as an earthquake. Nepal’s hydrology department says heavy rain was not the trigger.',
-    facts: [['Time', '08:37 Nepal time'], ['Seismic signal', 'Ms 5.2 (USGS)'], ['Images', 'Sentinel-2, 15 Dec 2025 and 28 Sep 2026']] },
-  { kicker: '08:44 · Seven minutes', title: 'The debris flow hits Gyirong Port', view: { longitude: 85.42, latitude: 28.245, zoom: 10.4 }, t: T0, play: [T0, mins('08:52')],
-    body: 'CCTV at Gyirong Port on the border showed the debris flow arriving at 08:44. It covered 20 km in about seven minutes, close to 180 km/h. At 08:40 the Rasuwagadhi river gauge read 1.62 m and calm. It was destroyed before its next reading.',
-    facts: [['Speed', 'about 180 km/h'], ['Rasuwagadhi gauge', '1.62 m, then destroyed'], ['Hit', 'Customs complex, friendship bridge, three police posts']] },
-  { kicker: '08:50 to 09:20 · Gauges go dark', title: 'Every gauge dies reading normal', view: { longitude: 85.27, latitude: 28.07, zoom: 9.6 }, t: mins('08:52'), play: [mins('08:52'), mins('09:35')],
-    body: 'Syabrubesi stopped at 08:50 showing 3.8 m. Betrawati stopped at 09:20 showing 3.55 m. Both were below their alert levels when they died, so the network never raised an alarm. The forecasting office heard about the flood by phone from Dhunche at 09:00. At 09:15 an SMS went to 679,295 people along the river, and a school principal in Bidur moved 1,643 students out before the water came.',
-    facts: [['Syabrubesi', '3.8 m, offline 08:50'], ['Betrawati', '3.55 m (warning 4.1 m), offline 09:20'], ['SMS alert', '09:15, 679,295 phones']] },
-  { kicker: '11:20 · First alarm', title: 'Malekhu rises 4 m in ten minutes', view: { longitude: 84.98, latitude: 27.86, zoom: 9.6 }, t: mins('09:35'), play: [mins('09:35'), mins('11:50')],
-    body: 'The first threshold crossed anywhere on the network was at Malekhu at 11:20, almost three hours after the collapse. The river rose almost 4 m between two 10-minute readings. At 11:43 the station and the Phurke bridge were swept away.',
-    facts: [['First alert', '11:20, 2 h 43 min after the collapse'], ['Rise', 'almost 4 m in 10 minutes'], ['Gauges lost', '4 between Rasuwa and Chitwan']] },
-  { kicker: '16:00 · Devghat', title: 'The last gauge stays green', view: { longitude: 84.62, latitude: 27.79, zoom: 9.4 }, t: mins('11:50'), play: [mins('11:50'), TEND],
-    body: 'The surge passed Mugling by 13:00 and reached Devghat at 15:20, where the Trishuli meets the Kali Gandaki to form the Narayani. Devghat peaked at 6.57 m at 16:00, under its 7.3 m amber level, so the last gauge on the river never went past green. About 20 million m³ of extra water went through.',
-    facts: [['Arrived', '15:20, 6 h 43 min after the collapse'], ['Peak', '6.57 m at 16:00 (amber 7.3 m)'], ['Extra water', 'about 20 million m³']] },
-  { kicker: 'What the forecasts saw', title: 'The river models saw nothing', view: 'fit', t: TEND, chart: true,
-    body: 'GloFAS, the global river forecast that JalNetra and many flood tools read, is driven by rain. It shows no flood on 26 August at all: the upper Trishuli stays near 135 m³/s and Devghat even dips. A system that only reads forecasts would have stayed silent while this happened.',
-    facts: [['Source', 'GloFAS v4 via Open-Meteo, daily'], ['Why', 'A glacier collapse is not in a rain-driven model']] },
-  { kicker: 'Into India', title: 'The Gandak at Valmikinagar', view: 'india', t: TEND, india: true,
-    body: `The Narayani becomes the Gandak at Valmikinagar barrage, ${Math.round(VALM)} km from the glacier. Maharajganj and Kushinagar went on high alert, all 36 barrage gates were opened and loudspeakers warned riverside villages. Bodies from the flood were recovered in Maharajganj in the days after. The dots are low-lying villages within 3 km of the river here.`,
-    facts: [['Barrage flow', '1.04 to 1.42 lakh cusecs, 8 to 10 pm (PTI)'], ['Low villages', `${A.villages.length} within 3 km, under 4 m above the river`], ['On alert', 'Maharajganj and Kushinagar (UP)']] },
-  { kicker: 'What JalNetra changes', title: 'A silent gauge is the alarm', view: 'fit', t: TEND, end: true,
-    body: 'Three gauges going dark one after another while reading normal is itself the signal. JalNetra treats a gauge loss or a fast rise as a flood front, moves it down the river and lists every low village below it with a time. Here that front was clear by 08:50, more than six hours before Devghat and 2.5 hours before the first official alarm. An operator approves, and a Hindi call goes to each sarpanch.',
-    facts: [['Front detected', '08:50 (Syabrubesi offline)'], ['Official first alarm', '11:20 (Malekhu)'], ['Lead time to Devghat', 'about 6 h 30 min']] },
+  { kicker: '26 August 2026 · 08:37', title: 'A glacier collapsed in Nepal', view: 'fit', t: T0 - 1,
+    body: `Ice and rock broke off Langtang Lirung. The flood ran ${Math.round(VALM)} km down the Trishuli and Narayani rivers to the Indian border.`,
+    facts: [{ v: 'Not rain', l: 'trigger' }, { v: `${Math.round(VALM)} km`, l: 'glacier to India' }, { v: '939', l: 'dead in Nepal' }] },
+  { kicker: '08:37 · The collapse', title: 'A wall of ice fell 1.2 km', view: { longitude: 85.47, latitude: 28.275, zoom: 11.6 }, t: T0, images: true,
+    body: 'About 0.2 km² of ice and rock dropped down the north face of the mountain. Seismometers recorded it as a magnitude 5.2 earthquake. Nepal\u2019s hydrology department says rain did not cause it.',
+    facts: [{ v: '1.2 km', l: 'fall' }, { v: '0.2 km²', l: 'ice and rock' }, { v: 'M 5.2', l: 'seismic signal' }] },
+  { kicker: '08:44 · Seven minutes later', title: '20 km in 7 minutes', view: { longitude: 85.42, latitude: 28.245, zoom: 10.4 }, t: T0, play: [T0, mins('08:52')],
+    body: 'At 08:44 border CCTV at Gyirong Port saw the debris flow arrive. The Rasuwagadhi gauge read a calm 1.62 m at 08:40, then was destroyed.',
+    facts: [{ v: '20 km', l: 'distance' }, { v: '7 min', l: 'time' }, { v: '~180 km/h', l: 'speed' }] },
+  { kicker: '08:50 to 11:20 · The warning network', title: 'The gauges failed in silence', view: { longitude: 85.1, latitude: 27.95, zoom: 9.2 }, t: mins('08:52'), play: [mins('08:52'), mins('11:50')],
+    body: 'Syabrubesi and Betrawati went offline while still reading normal, so no alarm was raised. The first alarm on the gauge network came at Malekhu, where the river rose almost 4 m in 10 minutes.',
+    facts: [{ v: '08:50', l: 'first gauge lost' }, { v: '11:20', l: 'first alarm' }, { v: '2 h 43 min', l: 'after the collapse' }] },
+  { kicker: '15:20 · Devghat', title: '6 h 43 min to reach Devghat', view: { longitude: 84.62, latitude: 27.79, zoom: 9.4 }, t: mins('11:50'), play: [mins('11:50'), TEND],
+    body: 'The surge passed Mugling at 13:00 and met the Kali Gandaki at Devghat, forming the Narayani. It peaked at 6.57 m, under the 7.3 m amber level, so the last gauge never turned from green.',
+    facts: [{ v: '188 km', l: 'from the glacier' }, { v: '15:20', l: 'arrived' }, { v: '6.57 m', l: 'peak (amber 7.3 m)' }] },
+  { kicker: 'Into India', title: 'The water enters India at Valmikinagar', view: 'india', t: TEND, india: true,
+    body: `At the barrage, ${Math.round(VALM)} km from the glacier, the Narayani becomes the Gandak and crosses the border into Bihar and Uttar Pradesh. All 36 gates were opened and Maharajganj and Kushinagar went on high alert. Dots are low villages within 3 km of the river.`,
+    facts: [{ v: `${Math.round(VALM)} km`, l: 'glacier to border' }, { v: '1.04–1.42 lakh', l: 'cusecs, 8 to 10 pm (PTI)' }, { v: `${A.villages.length}`, l: 'low villages shown' }] },
+  { kicker: 'Why JalNetra', title: 'A silent gauge should be the alarm', view: 'fit', t: TEND, end: true,
+    body: 'Rain-driven river forecasts showed no flood at all that day, and the first official alarm came 2 h 43 min after the collapse. JalNetra treats gauges going dark as a flood front, follows it down the river, lists the low villages below it, and lets an operator approve a Hindi call to each village head.',
+    facts: [{ v: '08:50', l: 'JalNetra flags the front' }, { v: '11:20', l: 'first official alarm' }, { v: '~2.5 h', l: 'earlier warning' }] },
 ]
 
-function Chart() {
-  const g = A.glofas, i26 = g.days.indexOf('2026-08-26')
-  const line = (q: number[], w: number, h: number) => { const lo = Math.min(...q) * 0.9, hi = Math.max(...q) * 1.1; return q.map((v, i) => `${(i / (q.length - 1)) * w},${h - ((v - lo) / (hi - lo)) * h}`).join(' ') }
-  const row = (label: string, q: number[]) => (
-    <div className="augchart">
-      <div className="aclab"><span>{label}</span><b>{q[i26].toLocaleString()} m³/s on 26 Aug</b></div>
-      <svg viewBox="0 0 360 60" preserveAspectRatio="none" role="img" aria-label={`${label} GloFAS flow, 18 Aug to 8 Sep`}>
-        <line x1={(i26 / (q.length - 1)) * 360} x2={(i26 / (q.length - 1)) * 360} y1="0" y2="60" className="acmark" />
-        <polyline points={line(q, 360, 56)} fill="none" className="acline" />
-      </svg>
-    </div>
-  )
-  return <div className="augcharts">{row('Upper Trishuli', g.trishuli)}{row('Devghat (Narayani)', g.devghat)}<div className="acfoot"><span>18 Aug</span><span>line: 26 Aug</span><span>8 Sep</span></div></div>
-}
-
-export default function Story({ onHome, onRivers, onLive }: { onHome: () => void; onRivers: () => void; onLive: () => void }) {
+export default function Story({ onHome, onRivers }: { onHome: () => void; onRivers: () => void; onLive: () => void }) {
   const [step, setStep] = useState(0)
   const [t, setT] = useState(STEPS[0].t)
   const [playing, setPlaying] = useState(false)
@@ -119,7 +100,10 @@ export default function Story({ onHome, onRivers, onLive }: { onHome: () => void
   const wk = S.india || S.end ? VALM : waveKm(t)
   const layers = useMemo(() => {
     const L: any[] = [
-      new GeoJsonLayer({ id: 'countries', data: countries as any, filled: true, stroked: true, getFillColor: [16, 19, 24], getLineColor: [70, 78, 92], lineWidthMinPixels: 1 }),
+      // satellite imagery everywhere, so zooming out never shows a patch on an empty canvas
+      new TileLayer({ id: 'basemap', data: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', minZoom: 0, maxZoom: 17, tileSize: 256,
+        renderSubLayers: (p: any) => { const b = p.tile.boundingBox; return new BitmapLayer(p, { data: undefined, image: p.data, bounds: [b[0][0], b[0][1], b[1][0], b[1][1]] }) } }),
+      new GeoJsonLayer({ id: 'countries', data: countries as any, filled: false, stroked: true, getLineColor: [255, 255, 255, 150], lineWidthMinPixels: 1.2 }),
       new BitmapLayer({ id: 'valley', image: valley, bounds: A.img.valley as any }),
       new BitmapLayer({ id: 's2', image: s2, bounds: S2B }),
     ]
@@ -140,6 +124,9 @@ export default function Story({ onHome, onRivers, onLive }: { onHome: () => void
     L.push(new ScatterplotLayer({ id: 'places', data: named, getPosition: (d: any) => [d.lng, d.lat], radiusUnits: 'pixels', getRadius: 4, getFillColor: [125, 211, 252] }))
     L.push(new TextLayer({ id: 'plabels', data: named, getPosition: (d: any) => [d.lng, d.lat], getText: (d: any) => d.name, getSize: 13, getPixelOffset: [0, -16], getAlignmentBaseline: 'bottom', fontFamily: FONT, fontWeight: 650, getColor: [255, 255, 255], outlineWidth: 4, outlineColor: [0, 0, 0, 220], fontSettings: { sdf: true }, characterSet: 'auto' }))
     if (S.india) {
+      const vb = PL.vb
+      L.push(new ScatterplotLayer({ id: 'entry', data: [vb], getPosition: (d: any) => [d.lng, d.lat], radiusUnits: 'pixels', getRadius: 18, filled: false, stroked: true, getLineColor: [253, 224, 71, 255], lineWidthMinPixels: 3 }))
+      L.push(new TextLayer({ id: 'entry-t', data: [{ p: [vb.lng, vb.lat + 0.075], t: 'NEPAL' }, { p: [vb.lng, vb.lat - 0.075], t: 'INDIA' }, { p: [vb.lng + 0.1, vb.lat], t: 'Water enters India here' }], getPosition: (d: any) => d.p, getText: (d: any) => d.t, getSize: 14, getColor: [13, 25, 18], background: true, getBackgroundColor: [253, 224, 71, 240], backgroundPadding: [7, 3], fontFamily: FONT, fontWeight: 700, fontSettings: { sdf: true }, characterSet: 'auto', getTextAnchor: (d: any) => (d.t.startsWith('Water') ? 'start' : 'middle') }))
       L.push(new ScatterplotLayer({ id: 'villages', data: A.villages, getPosition: (d: any) => [d.lng, d.lat], radiusUnits: 'pixels', getRadius: 6, getFillColor: [245, 158, 11], stroked: true, getLineColor: [12, 14, 18], lineWidthMinPixels: 1.5, pickable: true }))
       L.push(new TextLayer({ id: 'vlabels', data: A.villages.filter((_, i) => i % 3 === 0), getPosition: (d: any) => [d.lng, d.lat], getText: (d: any) => d.n, getSize: 11.5, getPixelOffset: [9, 0], getTextAnchor: 'start', fontFamily: FONT, fontWeight: 600, getColor: [253, 230, 138], outlineWidth: 4, outlineColor: [0, 0, 0, 220], fontSettings: { sdf: true }, characterSet: 'auto' }))
     }
@@ -150,21 +137,20 @@ export default function Story({ onHome, onRivers, onLive }: { onHome: () => void
     <div className="app">
       <DeckGL viewState={view} onViewStateChange={(e: any) => setView(e.viewState)} controller={true} layers={layers}
         getTooltip={({ object, layer }: any) => object && layer?.id === 'villages' ? { text: `${object.n} · ${object.dr} km from the river, about ${object.h} m above it` } : null} />
-      <aside className="story" ref={panel}>
+      <aside className="story story-lite" ref={panel}>
         <div className="sprog">{STEPS.map((_, k) => <button key={k} aria-label={`Go to step ${k + 1}`} className={k <= step ? 'on' : ''} onClick={() => go(k)} />)}</div>
         <div className="kicker anim">{S.kicker}</div>
         <h2 className="anim">{S.title}</h2>
         <p className="sbody anim">{S.body}</p>
         {S.images && <div className="seg anim augseg" aria-label="Satellite image"><button className={img === 'before' ? 'on' : ''} onClick={() => setImg('before')}>15 Dec 2025</button><button className={img === 'after' ? 'on' : ''} onClick={() => setImg('after')}>28 Sep 2026</button></div>}
-        {S.facts && <dl className="kv sfacts anim">{S.facts.map(([k, v]) => <div key={k} className="frow"><dt>{k}</dt><dd>{v}</dd></div>)}</dl>}
-        {S.chart && <div className="anim"><Chart /></div>}
+        {S.facts && <div className="sstats anim">{S.facts.map(f => <div key={f.l} className="sstat"><b>{f.v}</b><span>{f.l}</span></div>)}</div>}
         <div className="sdate">26 Aug 2026 · {hhmm(S.india || S.end ? TEND : Math.max(t, T0 - 1))} Nepal time{playing ? ' · playing' : ''}
           {S.play && !playing && <button className="link replay" onClick={() => { setT(S.t); playTo.current = S.play![1]; setPlaying(true) }}><FiPlay /> Replay</button>}</div>
         <div className="snav">
           <button onClick={() => (step === 0 ? onHome() : go(step - 1))}><FiArrowLeft /> Back</button>
-          {step < STEPS.length - 1 ? <button className="primary" onClick={() => go(step + 1)}>Next <FiArrowRight /></button> : <button className="primary" onClick={onRivers}><FiActivity /> Rivers of India, live</button>}
+          {step < STEPS.length - 1 ? <button className="primary" onClick={() => go(step + 1)}>Next <FiArrowRight /></button> : <button className="primary" onClick={onRivers}><FiActivity /> See it live</button>}
         </div>
-        {S.end && <><button className="link" onClick={onLive}>Gandak village model</button><button className="link" onClick={() => go(0)}>Replay the story</button></>}
+        {S.end && <button className="link" onClick={() => go(0)}>Replay the story</button>}
         <div className="lsrc">Timeline: Nepal DHM Flood Forecasting Division, Nepali Times, USGS, PTI. Images: Sentinel-2 (ESA Copernicus). River: traced on Copernicus DEM.</div>
       </aside>
     </div>
