@@ -13,7 +13,7 @@ import { useReveal } from '../components/ui/use-reveal'
 import './home.css'
 
 type Pub = { river: { created_at: string; points: number; normal: number; rising: number; warning: number; danger: number; headline: string; flagged: { river: string; near: string; status: string; trend?: string }[] } | null; gandak: { created_at: string; river: string; at_risk: number; overall: string } | null }
-type Props = { onRivers: () => void; onLive: () => void; onDemo: () => void; onMap: () => void; onValidate: () => void; onOps: () => void; onStory: () => void }
+type Props = { onAws?: () => void; onRivers: () => void; onLive: () => void; onDemo: () => void; onMap: () => void; onValidate: () => void; onOps: () => void; onStory: () => void }
 
 const FLOW = [
   { n: '01', t: 'Signals', d: 'River forecasts from monitored points across the network.' },
@@ -31,7 +31,7 @@ const SAFETY = [
 ]
 const DATA = ['Sentinel-1 and Sentinel-2 (Planetary Computer)', 'GloFAS discharge and rain (Open-Meteo)', 'Copernicus DEM GLO-30', 'OpenStreetMap', 'GeoNames']
 
-export default function Home({ onRivers, onLive, onMap, onStory }: Props) {
+export default function Home({ onAws, onRivers, onLive, onMap, onStory }: Props) {
   const [pub, setPub] = useState<Pub | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -105,6 +105,7 @@ export default function Home({ onRivers, onLive, onMap, onStory }: Props) {
           <button onClick={go('how')}>How it works</button>
           <button onClick={onLive}>Live map</button>
           <button onClick={onStory}>Glacier Story</button>
+          {onAws && <button onClick={onAws}>How AWS works</button>}
           <button onClick={go('safety')}>Safety</button>
           <button onClick={go('about')}>About</button>
         </nav>
@@ -228,7 +229,7 @@ export default function Home({ onRivers, onLive, onMap, onStory }: Props) {
         <section className="jn-section jn-about" id="about" aria-labelledby="jn-about">
           <div className="jn-head" data-reveal><span>ABOUT</span><h2 id="jn-about">Disasters outrun the information about them.</h2></div>
           <p data-reveal>In September 2026 a glacier collapse in Nepal sent a surge down the Trishuli and Narayani into the Gandak and on to villages in Bihar. Forecasts, imagery and village data existed, but they were scattered. JalNetra puts them in one operator-ready view, from early warning through evacuation and response, and keeps a person in charge of every warning.</p>
-          <div className="jn-cta" data-reveal><button className="jn-btn jn-btn-primary" onClick={onStory}>Start the walkthrough <FiArrowRight /></button><button className="jn-btn" onClick={onLive}>Open the live map</button></div>
+          <div className="jn-cta" data-reveal><button className="jn-btn jn-btn-primary" onClick={onStory}>Start the walkthrough <FiArrowRight /></button><button className="jn-btn" onClick={onLive}>Open the live map</button>{onAws && <button className="jn-btn" onClick={onAws}>How AWS works</button>}</div>
         </section>
       </main>
 
