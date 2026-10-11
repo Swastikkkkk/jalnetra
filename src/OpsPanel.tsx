@@ -119,7 +119,7 @@ function WarnBlock({ i }: { i: Incident }) {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [picked, setPicked] = useState<string[]>([])
   const [msg, setMsg] = useState(hindiMessage(i))
-  const [channel, setChannel] = useState<'call' | 'sms' | 'both'>('call')
+  const [channel] = useState<'call'>('call')
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [res, setRes] = useState<{ call?: string; sms?: string; error?: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -158,12 +158,6 @@ function WarnBlock({ i }: { i: Incident }) {
           return
         }
       }
-      if (channel === 'sms' || channel === 'both') {
-        try {
-          const sms = await sendAlerts(i.id, picked, msg, 'sms', { context })
-          next.sms = resultText('SMS', sms)
-        } catch (e) { next.sms = `SMS: ${(e as Error).message}` }
-      }
       setRes(next)
       load()
     } finally { setBusy(false) }
@@ -175,7 +169,7 @@ function WarnBlock({ i }: { i: Incident }) {
   const preview = () => { try { const u = new SpeechSynthesisUtterance(msg); u.lang = 'hi-IN'; speechSynthesis.cancel(); speechSynthesis.speak(u) } catch { /* no speech */ } }
   return (
     <div className="alert-panel">
-      <div className="alert-heading"><div className="kicker">Operator alert</div><div className="h">Warn people nearby</div><p className="note">Review the contacts and message, then choose one channel or send both sequentially.</p></div>
+      <div className="alert-heading"><div className="kicker">Operator alert</div><div className="h">Warn people nearby</div><p className="note">Review the contacts and message, then place the Hindi voice call.</p></div>
       {contacts.length === 0 ? <p className="note">No contacts within 25 km yet. Add the sarpanch, ASHA worker or NGO for this area.</p> : (
         <ul className="clist">{contacts.map(c => (
           <li key={c.id}><label><input type="checkbox" checked={picked.includes(c.id)} onChange={e => setPicked(p => e.target.checked ? [...p, c.id] : p.filter(x => x !== c.id))} />
@@ -192,15 +186,15 @@ function WarnBlock({ i }: { i: Incident }) {
         </div>
       ) : <button className="link back" onClick={() => setAdding(true)}><FiPlus /> Add contact</button>}
       {tel?.demo_phone && <label className="demo-row"><input type="checkbox" checked={demo} onChange={e => setDemo(e.target.checked)} /> <span>Also call demo phone <span className="imeta">{tel.demo_phone}</span></span></label>}
-      {tel && <p className="imeta">Voice calls: {tel.call === 'omnidimension' ? 'OmniDimension Hindi agent configured (verified on send)' : tel.call === 'twilio' ? 'Twilio text to speech configured (verified on send)' : 'not connected'}</p>}
+      {tel && <p className="imeta">Voice calls: {tel.call === 'omnidimension' ? 'OmniDimension Hindi agent configured' : tel.call === 'twilio' ? 'Twilio voice configured' : 'not connected'}</p>}
       {!APPROVED_STATUSES.includes(i.status) && <p className="note">Approve this incident before sending an alert.</p>}
       {APPROVED_STATUSES.includes(i.status) && contacts.length === 0 && <p className="note">This incident is approved, but no phone contact is available. Add and select a sarpanch or responder before sending.</p>}
       <label className="kicker mt" htmlFor="warn-msg">Message for selected contacts</label>
       <textarea id="warn-msg" className="note-in msg" rows={5} value={msg} onChange={e => setMsg(e.target.value)} />
       <div className="acts alert-actions">
-        <div className="seg sm inline channel-picker" aria-label="Alert channel">{(['call', 'sms', 'both'] as const).map(c => <button key={c} className={channel === c ? 'on' : ''} onClick={() => setChannel(c)}>{c === 'call' ? 'Voice call' : c === 'sms' ? 'SMS' : 'Call + SMS'}</button>)}</div>
+        <div className="seg sm inline channel-picker" aria-label="Alert channel"><button className="on">Voice call</button></div>
         <button className="ghost" onClick={preview}><FiVolume2 /> Preview</button>
-        <button className="primary-action" disabled={busy || !APPROVED_STATUSES.includes(i.status) || (picked.length === 0 && !(demo && channel === 'call')) || !msg.trim()} onClick={send}><FiPhoneCall /> {busy ? 'Sending…' : channel === 'both' ? 'Send Hindi call + SMS' : `Send ${channel === 'call' ? 'voice call' : 'SMS'}`}</button>
+        <button className="primary-action" disabled={busy || !APPROVED_STATUSES.includes(i.status) || (picked.length === 0 && !demo) || !msg.trim()} onClick={send}><FiPhoneCall /> {busy ? 'Calling…' : 'Place Hindi voice call'}</button>
       </div>
       {res && <div className="send-results" aria-live="polite">{res.error && <p className="note"><b>Error</b> · {res.error}</p>}{res.call && <p className="note"><b>Voice call</b> · {res.call.replace('Hindi voice call: ', '')}</p>}{res.sms && <p className="note"><b>SMS</b> · {res.sms.replace('SMS: ', '')}</p>}</div>}
       {alerts.length > 0 && <div className="history"><div className="kicker">Recent alert history</div><ul className="tl">{alerts.slice(0, 6).map(a => <li key={a.id}><b>{a.channel === 'call' ? 'Call' : 'SMS'} · {a.status === 'sent' ? 'sent' : a.status === 'failed' ? 'failed' : 'logged, not connected'}</b> · {a.jn_contacts?.name ?? 'Demo phone'} · {new Date(a.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</li>)}</ul></div>}

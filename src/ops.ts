@@ -1,8 +1,11 @@
 // Client for the shared JalNetra incident API. The API contract stays the same when the backend moves to AWS.
-export const API = (import.meta.env.VITE_JALNETRA_API as string | undefined) ?? 'https://oceaylrebzflgyxfjqfb.supabase.co/functions/v1/jalnetra-api'
-const ENV_KEY = import.meta.env.VITE_JALNETRA_KEY as string | undefined
-const getKey = () => { try { return ENV_KEY || localStorage.getItem('jn_key') || undefined } catch { return ENV_KEY } }
+// The API URL is public; operator keys must never be embedded in the SPA.
+// Keep the deployed AWS API as the safe default so a production build made
+// without a local .env file cannot silently fall back to the retired Supabase API.
+export const API = ((import.meta.env.VITE_JALNETRA_API as string | undefined) || 'https://u51iah4nqf.execute-api.ap-south-1.amazonaws.com').replace(/\/+$/, '')
+const getKey = () => { try { return localStorage.getItem('jn_key') || undefined } catch { return undefined } }
 export const saveKey = (k: string) => { try { localStorage.setItem('jn_key', k.trim()) } catch { /* storage blocked */ } }
+export const clearKey = () => { try { localStorage.removeItem('jn_key') } catch { /* storage blocked */ } }
 const CONTACT_PHONE_KEY = 'jn_default_contact_phone'
 export const getDefaultContactPhone = () => { try { return localStorage.getItem(CONTACT_PHONE_KEY) || '+91' } catch { return '+91' } }
 export const saveDefaultContactPhone = (phone: string) => { try { localStorage.setItem(CONTACT_PHONE_KEY, phone.trim()) } catch { /* storage blocked */ } }
@@ -40,11 +43,18 @@ export const TYPE_LABEL = { river_flood: 'River flood', waterlogging: 'Waterlogg
 export const hasKey = () => !!getKey()
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  if (!API) throw new Error('JalNetra API is not configured (set VITE_JALNETRA_API)')
   const KEY = getKey()
   if (!KEY) throw new Error('Add your operator key to connect the dashboard')
   const r = await fetch(API + path, { ...init, headers: { 'content-type': 'application/json', 'x-jalnetra-key': KEY, ...(init?.headers ?? {}) } })
   const j = await r.json().catch(() => ({}))
-  if (!r.ok) throw new Error(j.error ? `${j.error}${j.allowed ? ` (allowed: ${j.allowed.join(', ')})` : ''}` : `Request failed (${r.status})`)
+  if (!r.ok) {
+    if (r.status === 401 && j.error === 'Unknown API key') {
+      clearKey()
+      throw new Error('Operator key rejected by the AWS API. Enter a current operator key and reconnect.')
+    }
+    throw new Error(j.error ? `${j.error}${j.allowed ? ` (allowed: ${j.allowed.join(', ')})` : ''}` : `Request failed (${r.status})`)
+  }
   return j as T
 }
 export const listIncidents = () => call<{ incidents: Incident[] }>('/incidents?limit=500').then(r => r.incidents)
@@ -57,7 +67,7 @@ export type Alert = { id: string; channel: 'call' | 'sms'; message: string; stat
 export const ROLE_LABEL = { sarpanch: 'Sarpanch', asha: 'ASHA worker', ngo: 'NGO', official: 'Official', volunteer: 'Volunteer' } as const
 export const listContacts = (lat: number, lng: number, km = 20) => call<{ contacts: Contact[] }>(`/contacts?lat=${lat}&lng=${lng}&km=${km}`).then(r => r.contacts)
 export const addContact = (c: Omit<Contact, 'id' | 'km'>) => call<{ contact: Contact }>('/contacts', { method: 'POST', body: JSON.stringify(c) }).then(r => r.contact)
-export type Telephony = { call: 'omnidimension' | 'twilio' | 'not_configured'; demo_phone: string | null }
+export type Telephony = { call: 'omnidimension' | 'twilio' | 'not_configured'; sms?: 'twilio' | 'not_configured'; demo_phone: string | null }
 export type AlertContext = { place: string; title: string; source: string; observed: string; safe_place: string; village?: string; risk?: string; impact_time?: string; route?: string; model_updated?: string; simulated?: boolean }
 export const createIncident = (b: Record<string, unknown>) => call<{ merged: boolean; incident: Incident }>('/incidents', { method: 'POST', body: JSON.stringify(b) })
 /** Move a flood incident to "approved" through the allowed lifecycle steps. */
