@@ -1,3 +1,5 @@
+<p align="center"><img src="public/brand/jalnetra-logo.png" alt="JalNetra" width="340" /></p>
+
 # JalNetra: Because 2 Hours 43 Minutes Is Too Late
 
 > On 26 August 2026 a glacier collapsed above Langtang in Nepal. The flood raced **226 km** to the Indian border.

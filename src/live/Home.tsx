@@ -54,21 +54,19 @@ export default function Home({ onRivers, onLive, onMap, onStory }: Props) {
       const paths = draw(art.current, '.jn-contour', .14, 2.2)
       gsap.from('.jn-node', { opacity: 0, y: 12, scale: .94, duration: .6, stagger: .22, delay: .9, ease: 'power2.out', clearProps: 'transform' })
       if (paths.length) gsap.to(paths, { y: (i: number) => (i % 2 ? 7 : -7), duration: 5.5, ease: 'sine.inOut', yoyo: true, repeat: -1, stagger: { each: .35, from: 'center' } })
-      draw(peak.current, '.jn-ridge', .12, 1.8)
       // the ice falls from the peak, over and over, like the 08:37 collapse
       gsap.utils.toArray<SVGCircleElement>('.jn-flake').forEach((el, i) => {
         const tl = gsap.timeline({ repeat: -1, repeatDelay: 2.6, delay: 1.4 + i * 0.22 })
         tl.set(el, { y: 0, x: 0, opacity: 0 })
           .to(el, { opacity: .85, duration: .25, ease: 'none' })
-          .to(el, { y: 150 + (i % 4) * 8, x: (i % 2 ? 1 : -1) * (8 + i * 2.2), duration: 2.2 + (i % 5) * .25, ease: 'power1.in' }, '<')
+          .to(el, { y: 330 + (i % 4) * 26, x: (i % 2 ? 1 : -1) * (30 + i * 9), duration: 2.2 + (i % 5) * .25, ease: 'power1.in' }, '<')
           .to(el, { opacity: 0, duration: .5 }, '>-.5')
       })
       const glacier = root.current?.querySelector<HTMLElement>('.jn-glacier')
       const move = (e: PointerEvent) => {
         if (!glacier) return
         const r = glacier.getBoundingClientRect(), nx = (e.clientX - r.left) / r.width - .5, ny = (e.clientY - r.top) / r.height - .5
-        gsap.to('.jn-back', { x: nx * -14, y: ny * -6, duration: .8, ease: 'power2.out' })
-        gsap.to('.jn-peak .jn-ridge:not(.jn-ridge-far)', { x: nx * 6, duration: .8, ease: 'power2.out' })
+        gsap.to('.jn-mountain', { x: nx * -12, y: ny * -5, duration: .9, ease: 'power2.out' })
       }
       glacier?.addEventListener('pointermove', move)
       return () => glacier?.removeEventListener('pointermove', move)
@@ -87,7 +85,7 @@ export default function Home({ onRivers, onLive, onMap, onStory }: Props) {
   return (
     <div className="jn-home" ref={root}>
       <header className="jn-nav">
-        <button className="jn-brand" onClick={() => root.current?.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="JalNetra home"><MdWaves /><b>JalNetra</b></button>
+        <button className="jn-brand" onClick={() => root.current?.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="JalNetra home"><img src="/brand/jalnetra-logo.png" alt="JalNetra" height={40} /></button>
         <nav aria-label="Primary">
           <button onClick={go('how')}>How it works</button>
           <button onClick={onLive}>Live map</button>
@@ -106,16 +104,12 @@ export default function Home({ onRivers, onLive, onMap, onStory }: Props) {
             <p>Explore the 26 August 2026 Langtang Lirung glacier collapse with an interactive timeline, using the official timeline and satellite imagery.</p>
             <button className="jn-btn jn-btn-primary" onClick={onStory}>View Glacier Story <FiArrowRight /></button>
           </div>
-          <svg ref={peak} className="jn-peak" viewBox="0 0 560 220" fill="none" aria-hidden="true" preserveAspectRatio="xMaxYMax meet">
-            <g className="jn-back"><path className="jn-ridge jn-ridge-far" d="M20 212L110 140L170 168L255 104L330 146L400 96L470 150L560 200" /><path className="jn-ridge jn-ridge-far" d="M255 104L246 150L270 212M400 96L392 150L416 212" /></g>
-            <g className="jn-snow">{Array.from({ length: 12 }, (_, i) => <circle key={i} className="jn-flake" cx={296 + ((i * 7) % 30)} cy={34} r={1.5 + (i % 3) * 0.6} />)}</g>
-            <path className="jn-ridge" d="M0 212L96 150L160 168L252 70L304 22L338 58L372 40L420 112L470 92L560 190" />
-            <path className="jn-ridge" d="M304 22L290 84L318 120L304 212" />
-            <path className="jn-ridge" d="M252 70L274 118L246 160L262 212" />
-            <path className="jn-ridge" d="M338 58L330 112L356 150L346 212" />
-            <path className="jn-ridge" d="M372 40L384 100L410 140L402 212" />
-            <path className="jn-ridge" d="M96 150L132 186L120 212M420 112L446 168L432 212M160 168L190 196L182 212" />
-          </svg>
+          <div className="jn-mountain" aria-hidden="true">
+            <img src="/brand/mountain.webp" alt="" />
+            <svg ref={peak} viewBox="0 0 2000 667" preserveAspectRatio="none" fill="none">
+              <g className="jn-snow">{Array.from({ length: 12 }, (_, i) => <circle key={i} className="jn-flake" cx={1036 + ((i * 11) % 44)} cy={88} r={3.4 + (i % 3) * 1.3} />)}</g>
+            </svg>
+          </div>
           <ol className="jn-glacier-time" aria-label="Timeline">
             <li className="on"><i /><span><b>08:37</b><small>Glacier collapse (Langtang Lirung)</small></span></li>
             <li><i /></li><li><i /></li><li><i /></li>

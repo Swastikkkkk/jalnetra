@@ -7,9 +7,8 @@ html.theme-light button:focus-visible,html.theme-light input:focus-visible,html.
 
 html.theme-light {
 /* shared brand mark, same look as the home page nav */
-.app-brand{display:inline-flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:7px 12px 7px 9px;color:var(--green);cursor:pointer;font-family:var(--font);box-shadow:0 6px 20px -14px rgba(15,74,56,.5)}
-.app-brand svg{width:26px;height:26px}
-.app-brand b{font-size:18px;letter-spacing:-.03em;color:var(--ink);font-weight:650}
+.app-brand{display:inline-flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 14px 6px 10px;color:var(--green);cursor:pointer;font-family:var(--font);box-shadow:0 6px 20px -14px rgba(15,74,56,.5)}
+.app-brand img{display:block;height:32px;width:auto}
 .app-brand:hover{border-color:var(--green-2)}
 
 /* surfaces */
