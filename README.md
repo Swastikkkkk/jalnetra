@@ -105,6 +105,16 @@ API: `cd aws-api && npm install && npm test`. Infrastructure: `cd infra && npm i
 
 Sentinel-1 and Sentinel-2 (Microsoft Planetary Computer) · GloFAS river discharge and rain (Open-Meteo) · Copernicus DEM GLO-30 · OpenStreetMap · GeoNames
 
+
+## Team Members
+
+| Name | GitHub ID | AWS Builder Center Alias |
+|---|---|---|
+| Swastik Dutt | [GitHub (Swastikkkkk)](https://github.com/Swastikkkkk) | @devswastik |
+| Veer Jain | [GitHub (vjn6805)](https://github.com/vjn6805) | @vjn6805 |
+| Piyush Agarwal | [GitHub (Piyush5525)](https://github.com/Piyush5525) | @piyush5525 |
+
+
 ---
 
 *JalNetra: जल (water) + नेत्र (eye). The eye on the water.*
