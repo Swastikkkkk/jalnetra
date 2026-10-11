@@ -1,3 +1,5 @@
+<p align="center"><img src="public/brand/jalnetra-logo.png" alt="JalNetra" width="340" /></p>
+
 # JalNetra: Because 2 Hours 43 Minutes Is Too Late
 
 > On 26 August 2026 a glacier collapsed above Langtang in Nepal. The flood raced **226 km** to the Indian border.
@@ -19,6 +21,8 @@
 | **Warn** | One Hindi voice call, a spoken advisory, a 3D evacuation route and an AR arrow to the safe place |
 
 The flow of the site: **Home → Glacier story → Live map → Approve → the phone rings.**
+
+A companion AR app, **Oasis Builder**, works on prevention: see [Part 2](#part-2-oasis-builder-the-prevention-app).
 
 ## How it runs on AWS
 
@@ -80,6 +84,46 @@ Tested against real Sentinel-1 radar flood maps from the 2026 event, leaving eac
 - One attempt per alert, a cooldown, 3 calls per session and a daily cap, enforced on the server
 - "Dispatched" is never shown as "answered". Failed or unknown outcomes stay locked
 - Exercise data is labelled EXERCISE everywhere and kept apart from real incidents
+
+## Part 2: Oasis Builder, the prevention app
+
+JalNetra warns when water is coming. **Oasis Builder** helps a community make less of it arrive.
+
+A Unity Android AR app, built on the same flood data:
+
+1. Point the phone at a plot of land. It reads your location and the local weather (humidity, rainfall)
+2. Place a tree or a green patch in AR
+3. See what that change does: how much rain water the spot can hold, and how much flood runoff it takes off the river
+
+*Status: prototype. The backend below is the serverless design it is built around.*
+
+```mermaid
+flowchart LR
+  U[Unity Android app<br/>AR + location + weather] -- HTTPS JSON --> G[API Gateway<br/>HTTP API]
+  G --> L[Lambda functions]
+  L --> D[(DynamoDB<br/>session summaries)]
+  L --> S[(S3<br/>report JSON · PDF · images)]
+  L --> C[Cognito<br/>sign-in · API protection]
+  L --> W[CloudWatch<br/>logs · monitoring]
+```
+
+| Service | Why it is here | When |
+|---|---|---|
+| **AWS SAM CLI** | Define, run locally and deploy the backend as code | Use |
+| **Lambda** | Small functions that save and read reports | Use |
+| **API Gateway** (HTTP API) | HTTPS endpoints the app calls | Use |
+| **DynamoDB** | Lightweight session and report data | Use |
+| **CloudWatch** | Lambda logs and errors | Automatic with Lambda |
+| **S3** | Larger exported files and images | Optional for v1 |
+| **Cognito** | User accounts and a protected API | After the anonymous prototype works |
+| **EventBridge** | Scheduled cleanup or report processing | Optional |
+
+Deliberately left out for the first version: SageMaker, EKS/ECS/Fargate/EC2 and OpenSearch. A small working serverless backend beats a large pile of disconnected services.
+
+**Build it, then ship it**
+
+- *Build:* AWS SAM CLI and Docker Desktop run Lambda and API Gateway locally, with no cloud cost
+- *Ship:* `sam deploy` puts Lambda, API Gateway and DynamoDB on AWS for a public demo URL. Set a billing alert first
 
 ## Repo map
 

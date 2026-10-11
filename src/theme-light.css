@@ -7,9 +7,8 @@ html.theme-light button:focus-visible,html.theme-light input:focus-visible,html.
 
 html.theme-light {
 /* shared brand mark, same look as the home page nav */
-.app-brand{display:inline-flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:7px 12px 7px 9px;color:var(--green);cursor:pointer;font-family:var(--font);box-shadow:0 6px 20px -14px rgba(15,74,56,.5)}
-.app-brand svg{width:26px;height:26px}
-.app-brand b{font-size:18px;letter-spacing:-.03em;color:var(--ink);font-weight:650}
+.app-brand{display:inline-flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 14px 6px 10px;color:var(--green);cursor:pointer;font-family:var(--font);box-shadow:0 6px 20px -14px rgba(15,74,56,.5)}
+.app-brand img{display:block;height:32px;width:auto}
 .app-brand:hover{border-color:var(--green-2)}
 
 /* surfaces */
@@ -241,3 +240,21 @@ html.theme-light .queue-now b.ok{color:#136148}html.theme-light .queue-now b.war
 html.theme-light .queue-sec{margin-top:14px}
 html.theme-light .queue-sec h3{margin:0 0 6px;font-size:13px;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
 html.theme-light .queue-sec.practice{padding-top:12px;border-top:1px dashed var(--line)}
+
+/* site-wide soft mountain backdrop (the story page keeps its own look: it never gets .theme-light) */
+html.theme-light{background:#f6f7f2}
+html.theme-light body,html.theme-light #root{background:transparent}
+html.theme-light::before{content:"";position:fixed;right:0;bottom:0;width:min(820px,88vw);aspect-ratio:606/297;z-index:-1;pointer-events:none;background:url(/brand/bg-mountain.webp) center/100% 100% no-repeat;opacity:.55;-webkit-mask-image:radial-gradient(ellipse 50% 50% at 50% 55%,#000 40%,transparent 100%);mask-image:radial-gradient(ellipse 50% 50% at 50% 55%,#000 40%,transparent 100%)}
+html.theme-light .jn-home{background:radial-gradient(900px 520px at 85% 8%,rgba(27,122,90,.07),transparent 65%)}
+
+/* animated water along the bottom (WaterBackdrop, GSAP); hidden on the dark glacier story */
+.water-bd{position:fixed;left:0;right:0;bottom:0;height:min(17vh,150px);z-index:-1;pointer-events:none;overflow:hidden;-webkit-mask-image:linear-gradient(transparent,#000 40%);mask-image:linear-gradient(transparent,#000 40%)}
+.water-bd svg{position:absolute;left:0;bottom:0;width:100%;height:100%;display:block}
+html:not(.theme-light) .water-bd{display:none}
+
+/* /aws-flow: the 3D data-flow scene full screen, with the logo and one action floating over it */
+.aws-flow{position:fixed;inset:0;background:#0b1020}
+.aws-flow iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
+.aws-flow-bar{position:absolute;top:12px;right:12px;display:flex;flex-direction:row-reverse;gap:10px;align-items:center;pointer-events:none}
+.aws-flow-bar>*{pointer-events:auto}
+.aws-flow-btn{background:var(--green);color:#fff;border:0;border-radius:999px;padding:9px 16px;font:600 14px var(--font);cursor:pointer}
