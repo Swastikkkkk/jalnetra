@@ -240,3 +240,14 @@ html.theme-light .queue-now b.ok{color:#136148}html.theme-light .queue-now b.war
 html.theme-light .queue-sec{margin-top:14px}
 html.theme-light .queue-sec h3{margin:0 0 6px;font-size:13px;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
 html.theme-light .queue-sec.practice{padding-top:12px;border-top:1px dashed var(--line)}
+
+/* site-wide soft mountain backdrop (the story page keeps its own look: it never gets .theme-light) */
+html.theme-light{background:#f6f7f2}
+html.theme-light body,html.theme-light #root{background:transparent}
+html.theme-light::before{content:"";position:fixed;right:0;bottom:0;width:min(820px,88vw);aspect-ratio:606/297;z-index:-1;pointer-events:none;background:url(/brand/bg-mountain.webp) center/100% 100% no-repeat;opacity:.55;-webkit-mask-image:radial-gradient(ellipse 50% 50% at 50% 55%,#000 40%,transparent 100%);mask-image:radial-gradient(ellipse 50% 50% at 50% 55%,#000 40%,transparent 100%)}
+html.theme-light .jn-home{background:radial-gradient(900px 520px at 85% 8%,rgba(27,122,90,.07),transparent 65%)}
+
+/* animated water along the bottom (WaterBackdrop, GSAP); hidden on the dark glacier story */
+.water-bd{position:fixed;left:0;right:0;bottom:0;height:min(17vh,150px);z-index:-1;pointer-events:none;overflow:hidden;-webkit-mask-image:linear-gradient(transparent,#000 40%);mask-image:linear-gradient(transparent,#000 40%)}
+.water-bd svg{position:absolute;left:0;bottom:0;width:100%;height:100%;display:block}
+html:not(.theme-light) .water-bd{display:none}

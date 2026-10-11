@@ -7,6 +7,7 @@ import Story from './live/Story'
 import PublicDemoFeed from './demo/PublicDemoFeed'
 import RoutePage from './live/RoutePage'
 import SimRoute from './live/SimRoute'
+import { WaterBackdrop } from './components/WaterBackdrop'
 
 /**
  * The walkthrough is Home -> Glacier story -> Live. River Watch (all of India) and the Gandak live console are one screen, /live.
@@ -50,6 +51,10 @@ const pathOf = (x: Screen) => x.s === 'home' ? '/home' : x.s === 'live' ? '/live
 
 /** Screens: home, glacier story, the live map (India rivers + Gandak alerts), 2026 validation, historical map and operations. */
 export default function Root() {
+  return <><WaterBackdrop /><Screens /></>
+}
+
+function Screens() {
   const [scr, setScr] = useState<Screen>(parse)
   useEffect(() => {
     const f = () => setScr(parse())

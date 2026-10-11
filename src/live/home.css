@@ -25,7 +25,7 @@
 .jn-eyebrow{font:600 10.5px var(--mono);letter-spacing:.16em;color:var(--muted)}
 .jn-glacier h2{margin:10px 0 12px;font-size:clamp(26px,3.2vw,42px);line-height:1.05;letter-spacing:-.045em;font-weight:700;color:var(--green)}
 .jn-glacier p{margin:0 0 22px;max-width:52ch;color:var(--muted);font-size:14.5px;line-height:1.6}
-.jn-mountain{position:relative;width:100%;aspect-ratio:2000/667;align-self:end;justify-self:end;max-width:640px;-webkit-mask-image:linear-gradient(#000 82%,transparent);mask-image:linear-gradient(#000 82%,transparent)}
+.jn-mountain{position:relative;width:100%;aspect-ratio:560/240;align-self:end;justify-self:end;max-width:640px;-webkit-mask-image:linear-gradient(#000 82%,transparent);mask-image:linear-gradient(#000 82%,transparent)}
 .jn-mountain img,.jn-mountain svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 .jn-mountain img{object-fit:contain;object-position:right bottom;opacity:.95}
 .jn-ridge{stroke:var(--green);stroke-width:1;stroke-linecap:round;stroke-linejoin:round;opacity:.55}
@@ -149,3 +149,5 @@ button.jn-feature:hover .jn-feature-icon{background:var(--green);color:#fff}
 .jn-footlink{background:none;border:0;padding:0;color:var(--green);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline}
 
 .jn-brand img{display:block;height:40px;width:auto}
+
+.jn-peak{overflow:visible}.jn-wl{stroke:#2b6cb0;stroke-width:1;opacity:.5;stroke-linecap:round}.jn-wl:nth-child(2){stroke:var(--green-2);opacity:.4}.jn-wl:nth-child(3){opacity:.3}.jn-water{-webkit-mask-image:none}

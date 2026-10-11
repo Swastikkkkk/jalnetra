@@ -54,14 +54,29 @@ export default function Home({ onRivers, onLive, onMap, onStory }: Props) {
       const paths = draw(art.current, '.jn-contour', .14, 2.2)
       gsap.from('.jn-node', { opacity: 0, y: 12, scale: .94, duration: .6, stagger: .22, delay: .9, ease: 'power2.out', clearProps: 'transform' })
       if (paths.length) gsap.to(paths, { y: (i: number) => (i % 2 ? 7 : -7), duration: 5.5, ease: 'sine.inOut', yoyo: true, repeat: -1, stagger: { each: .35, from: 'center' } })
+      // the mountain is drawn line by line (first stroke ~1 s after the page is ready), then the water appears under it
+      const ridges = Array.from(peak.current?.querySelectorAll<SVGPathElement>('.jn-ridge') ?? [])
+      if (ridges.length) {
+        ridges.forEach(p => { const l = p.getTotalLength(); gsap.set(p, { strokeDasharray: l, strokeDashoffset: l }) })
+        gsap.set('.jn-wl', { opacity: 0 })
+        ScrollTrigger.create({
+          trigger: '.jn-mountain', start: 'top 92%', once: true,
+          onEnter: () => {
+            const tl = gsap.timeline({ delay: .8 })
+            tl.to(ridges, { strokeDashoffset: 0, duration: 1.5, stagger: .22, ease: 'power2.inOut' })
+              .to('.jn-wl', { opacity: (i: number) => [.5, .4, .3][i] ?? .3, duration: 1.2, stagger: .25, ease: 'sine.out' }, '>-.6')
+          },
+        })
+      }
       // the ice falls from the peak, over and over, like the 08:37 collapse
       gsap.utils.toArray<SVGCircleElement>('.jn-flake').forEach((el, i) => {
-        const tl = gsap.timeline({ repeat: -1, repeatDelay: 2.6, delay: 1.4 + i * 0.22 })
+        const tl = gsap.timeline({ repeat: -1, repeatDelay: 2.6, delay: 3.6 + i * 0.22 })
         tl.set(el, { y: 0, x: 0, opacity: 0 })
           .to(el, { opacity: .85, duration: .25, ease: 'none' })
-          .to(el, { y: 330 + (i % 4) * 26, x: (i % 2 ? 1 : -1) * (30 + i * 9), duration: 2.2 + (i % 5) * .25, ease: 'power1.in' }, '<')
+          .to(el, { y: 120 + (i % 4) * 9, x: (i % 2 ? 1 : -1) * (8 + i * 2.4), duration: 2.2 + (i % 5) * .25, ease: 'power1.in' }, '<')
           .to(el, { opacity: 0, duration: .5 }, '>-.5')
       })
+      gsap.utils.toArray<SVGPathElement>('.jn-wl').forEach((el, i) => gsap.to(el, { x: i % 2 ? -24 : 24, duration: 4 + i * 1.3, ease: 'sine.inOut', yoyo: true, repeat: -1 }))
       const glacier = root.current?.querySelector<HTMLElement>('.jn-glacier')
       const move = (e: PointerEvent) => {
         if (!glacier) return
@@ -105,9 +120,20 @@ export default function Home({ onRivers, onLive, onMap, onStory }: Props) {
             <button className="jn-btn jn-btn-primary" onClick={onStory}>View Glacier Story <FiArrowRight /></button>
           </div>
           <div className="jn-mountain" aria-hidden="true">
-            <img src="/brand/mountain.webp" alt="" />
-            <svg ref={peak} viewBox="0 0 2000 667" preserveAspectRatio="none" fill="none">
-              <g className="jn-snow">{Array.from({ length: 12 }, (_, i) => <circle key={i} className="jn-flake" cx={1036 + ((i * 11) % 44)} cy={88} r={3.4 + (i % 3) * 1.3} />)}</g>
+            <svg ref={peak} className="jn-peak" viewBox="0 0 560 240" fill="none" preserveAspectRatio="xMaxYMax meet">
+              <g className="jn-back"><path className="jn-ridge jn-ridge-far" d="M20 212L110 140L170 168L255 104L330 146L400 96L470 150L560 200" /><path className="jn-ridge jn-ridge-far" d="M255 104L246 150L270 212M400 96L392 150L416 212" /></g>
+              <g className="jn-snow">{Array.from({ length: 12 }, (_, i) => <circle key={i} className="jn-flake" cx={296 + ((i * 7) % 30)} cy={34} r={1.5 + (i % 3) * 0.6} />)}</g>
+              <path className="jn-ridge" d="M0 212L96 150L160 168L252 70L304 22L338 58L372 40L420 112L470 92L560 190" />
+              <path className="jn-ridge" d="M304 22L290 84L318 120L304 212" />
+              <path className="jn-ridge" d="M252 70L274 118L246 160L262 212" />
+              <path className="jn-ridge" d="M338 58L330 112L356 150L346 212" />
+              <path className="jn-ridge" d="M372 40L384 100L410 140L402 212" />
+              <path className="jn-ridge" d="M96 150L132 186L120 212M420 112L446 168L432 212M160 168L190 196L182 212" />
+              <g className="jn-water">
+                <path className="jn-wl" d="M-40 218q35-7 70 0t70 0t70 0t70 0t70 0t70 0t70 0t70 0t70 0t70 0" />
+                <path className="jn-wl" d="M-20 227q35-7 70 0t70 0t70 0t70 0t70 0t70 0t70 0t70 0t70 0t70 0" />
+                <path className="jn-wl" d="M-60 236q35-7 70 0t70 0t70 0t70 0t70 0t70 0t70 0t70 0t70 0t70 0" />
+              </g>
             </svg>
           </div>
           <ol className="jn-glacier-time" aria-label="Timeline">
