@@ -7,7 +7,7 @@
 <!--
   A standalone 3D picture of how JalNetra's data moves through AWS: every service is a mailbox, every piece of data is an envelope.
   Not part of the website. Open this file in Chrome or Edge (internet needed once, for three.js from a CDN) and screen-record it.
-  Drag to orbit, scroll to zoom, right-drag to pan. Keys: space = pause, 1-5 = flows, S = speed, + / - = zoom, R = reset view, O = auto-orbit.
+  Drag to orbit, scroll to zoom, right-drag to pan. Keys: space = pause, 1-5 = flows, S = speed, + / - = zoom, T = restart, R = reset view, O = auto-orbit.
 -->
 <style>
   :root { color-scheme: light; --ink: #20262e; --muted: #7a8089; --line: #d9d5cc; --accent: #2f7d6d; --aws: #5b6b8a; }
@@ -63,6 +63,7 @@
     <div class="scenes" id="scenes"></div>
     <div class="cap"><small><span id="capk"></span><span class="dots" id="dots"></span></small><p id="cap"></p><em id="carry"></em></div>
     <div class="ctl">
+      <button id="restart" title="Start over from the beginning (T)">Restart</button>
       <button id="zout" title="Zoom out (-)">−</button>
       <button id="zin" title="Zoom in (+)">+</button>
       <button id="speed" title="Speed (S)">1×</button>
@@ -379,11 +380,14 @@ const zoomBy = f => { zoomK = Math.min(2.4, Math.max(0.35, zoomK * f)); userUnti
 // a scroll or pinch zoom is remembered too, so the camera does not drift back when it resumes following
 controls.addEventListener('end', () => { zoomK = Math.min(2.4, Math.max(0.35, camera.position.distanceTo(controls.target) / focus.dist)) })
 $('zin').onclick = () => zoomBy(0.8); $('zout').onclick = () => zoomBy(1.25)
+const restart = () => { paused = false; els.pause.textContent = '❚❚'; resetView(); startScene(0) }
+$('restart').onclick = restart
 els.pause.onclick = togglePause; els.orbit.onclick = toggleOrbit; els.reset.onclick = resetView; els.speed.onclick = cycleSpeed
 addEventListener('keydown', e => {
   if (e.code === 'Space') { e.preventDefault(); togglePause() }
   else if (e.key === 'o' || e.key === 'O') toggleOrbit()
   else if (e.key === 'r' || e.key === 'R') resetView()
+  else if (e.key === 't' || e.key === 'T') restart()
   else if (e.key === 's' || e.key === 'S') cycleSpeed()
   else if (e.key === '+' || e.key === '=') zoomBy(0.8)
   else if (e.key === '-' || e.key === '_') zoomBy(1.25)
