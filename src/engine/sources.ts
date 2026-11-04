@@ -2,14 +2,14 @@
 // gauge feed for the Gandak, so the "current" value is GloFAS's own estimate). Rain: Open-Meteo, 4 points in the
 // Nepal catchment, past 3 days observed and next 3 days forecast.
 import type { Inputs, ModelParams, Observation } from './core'
-import { API } from '../ops'
+import { FLOOD_API, FORECAST_API } from '../ops'
 
 const day = (d: string) => Date.parse(d + 'T12:00:00Z')
 
 export async function liveInputs(M: ModelParams): Promise<Inputs> {
   const S = M.stations, R = M.rainPoints
-  const fu = `${API}/proxy/flood?latitude=${S.map(s => s.glat).join(',')}&longitude=${S.map(s => s.glng).join(',')}&daily=river_discharge,river_discharge_max,river_discharge_min&past_days=7&forecast_days=7`
-  const ru = `${API}/proxy/forecast?latitude=${R.map(p => p[0]).join(',')}&longitude=${R.map(p => p[1]).join(',')}&daily=precipitation_sum&past_days=3&forecast_days=3&timezone=UTC`
+  const fu = `${FLOOD_API}?latitude=${S.map(s => s.glat).join(',')}&longitude=${S.map(s => s.glng).join(',')}&daily=river_discharge,river_discharge_max,river_discharge_min&past_days=7&forecast_days=7`
+  const ru = `${FORECAST_API}?latitude=${R.map(p => p[0]).join(',')}&longitude=${R.map(p => p[1]).join(',')}&daily=precipitation_sum&past_days=3&forecast_days=3&timezone=UTC`
   const get = async (u: string, name: string) => {
     const x = await fetch(u).catch(() => null)
     if (x?.ok) return x.json()

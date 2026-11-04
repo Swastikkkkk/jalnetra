@@ -1,5 +1,5 @@
 import { STATUS_ORDER, statusOf, type PointStatus, type RiverPoint, type Status, type Trend } from '../engine/india'
-import { API } from '../ops'
+import { FLOOD_API } from '../ops'
 
 export type Run = { at: number; date: string; statuses: PointStatus[]; source: 'live' | 'server' | 'replay'; alerts?: number }
 export const FRESH_MS = 6 * 3600e3
@@ -86,7 +86,7 @@ export function parseForecastBatch(body: unknown, points: RiverPoint[], date: st
   })
 }
 
-const forecastUrl = (points: RiverPoint[], pastDays: number) => `${API}/proxy/flood?latitude=${points.map(p => p.glat).join(',')}&longitude=${points.map(p => p.glng).join(',')}&daily=river_discharge&past_days=${pastDays}&forecast_days=8`
+const forecastUrl = (points: RiverPoint[], pastDays: number) => `${FLOOD_API}?latitude=${points.map(p => p.glat).join(',')}&longitude=${points.map(p => p.glng).join(',')}&daily=river_discharge&past_days=${pastDays}&forecast_days=8`
 export async function pointSeries(p: RiverPoint, signal: AbortSignal): Promise<PointStatus> {
   return parseForecastBatch(await requestJson(forecastUrl([p], 10), signal), [p], new Date().toISOString().slice(0, 10))[0]
 }

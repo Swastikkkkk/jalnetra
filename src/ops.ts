@@ -2,6 +2,11 @@
 // The API URL is public; operator keys must never be embedded in the SPA.
 // Keep the deployed AWS API as the safe default so a production build made
 // without a local .env file cannot silently fall back to the retired Supabase API.
+// Public flood and rain data come straight from Open-Meteo (free, no key, CORS open),
+// so the map works without any backend. The operator dashboard still uses API below.
+export const FLOOD_API = 'https://flood-api.open-meteo.com/v1/flood'
+export const FORECAST_API = 'https://api.open-meteo.com/v1/forecast'
+
 export const API = ((import.meta.env.VITE_JALNETRA_API as string | undefined) || 'https://u51iah4nqf.execute-api.ap-south-1.amazonaws.com').replace(/\/+$/, '')
 const getKey = () => { try { return localStorage.getItem('jn_key') || undefined } catch { return undefined } }
 export const saveKey = (k: string) => { try { localStorage.setItem('jn_key', k.trim()) } catch { /* storage blocked */ } }

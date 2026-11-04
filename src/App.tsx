@@ -19,7 +19,7 @@ import type { Incident } from './ops'
 import { BentoGrid, BentoGridItem } from './components/ui/bento-grid'
 import { Spotlight } from './components/ui/spotlight'
 import { AppBrand } from './components/AppBrand'
-import { API } from './ops'
+import { FLOOD_API, FORECAST_API } from './ops'
 
 type V = (typeof D.villages)[number]
 type State = 'affected' | 'atrisk' | 'watch' | 'safe'
@@ -66,8 +66,8 @@ async function fetchLive(): Promise<typeof LIVE | null> {
   try {
     const S = LIVE.stations
     const pts = [[27.725006, 84.375], [27.575005, 84.07501], [26.975006, 84.125], [26.475006, 84.475006], [25.975006, 84.975006], [25.875, 85.07501], [25.775002, 85.125]]
-    const fu = `${API}/proxy/flood?latitude=${pts.map(p => p[0]).join(',')}&longitude=${pts.map(p => p[1]).join(',')}&daily=river_discharge,river_discharge_max,river_discharge_min&past_days=7&forecast_days=10`
-    const ru = `${API}/proxy/forecast?latitude=${LIVE.rain.map(r => r.lat).join(',')}&longitude=${LIVE.rain.map(r => r.lng).join(',')}&daily=precipitation_sum&forecast_days=7&timezone=UTC`
+    const fu = `${FLOOD_API}?latitude=${pts.map(p => p[0]).join(',')}&longitude=${pts.map(p => p[1]).join(',')}&daily=river_discharge,river_discharge_max,river_discharge_min&past_days=7&forecast_days=10`
+    const ru = `${FORECAST_API}?latitude=${LIVE.rain.map(r => r.lat).join(',')}&longitude=${LIVE.rain.map(r => r.lng).join(',')}&daily=precipitation_sum&forecast_days=7&timezone=UTC`
     const [f, r] = await Promise.all([fetch(fu).then(x => x.json()), fetch(ru).then(x => x.json())])
     const today = new Date().toISOString().slice(0, 10)
     const stations = S.map((s, i) => { const d = f[i].daily; const ti = Math.max(0, d.time.indexOf(today)); return { ...s, time: d.time, q: d.river_discharge, qmax: d.river_discharge_max, qmin: d.river_discharge_min, today: ti, fmax: Math.max(...d.river_discharge_max.slice(ti + 1)) } })
