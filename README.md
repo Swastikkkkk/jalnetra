@@ -24,7 +24,9 @@ The flow of the site: **Home → Glacier story → Live map → Approve → the 
 
 A companion AR app, **Oasis Builder**, works on prevention: see [Part 2](#part-2-oasis-builder-the-prevention-app).
 
-## How it runs on AWS
+> **Hosting now:** the site is on Vercel and the shared incident API runs as a Supabase Edge Function (`backbone/jalnetra-api`, same contract as the Lambda port in `aws-api/`). The AWS stack below was the hackathon deployment; it has been torn down to stop billing, with a final RDS snapshot kept so it can be restored.
+
+## How it ran on AWS
 
 ```mermaid
 flowchart LR

@@ -7,7 +7,7 @@
 export const FLOOD_API = 'https://flood-api.open-meteo.com/v1/flood'
 export const FORECAST_API = 'https://api.open-meteo.com/v1/forecast'
 
-export const API = ((import.meta.env.VITE_JALNETRA_API as string | undefined) || 'https://u51iah4nqf.execute-api.ap-south-1.amazonaws.com').replace(/\/+$/, '')
+export const API = ((import.meta.env.VITE_JALNETRA_API as string | undefined) || 'https://oceaylrebzflgyxfjqfb.supabase.co/functions/v1/jalnetra-api').replace(/\/+$/, '')
 const getKey = () => { try { return localStorage.getItem('jn_key') || undefined } catch { return undefined } }
 export const saveKey = (k: string) => { try { localStorage.setItem('jn_key', k.trim()) } catch { /* storage blocked */ } }
 export const clearKey = () => { try { localStorage.removeItem('jn_key') } catch { /* storage blocked */ } }
