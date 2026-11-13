@@ -7,7 +7,7 @@
 >
 > **JalNetra closes that gap**: it watches every river, finds the villages the water will reach, and lets a person approve a Hindi warning call to the village head. Hours earlier.
 
-**Live demo:** https://jalnetra-lilac.vercel.app
+**Live demo:** https://d1oi8xa605dsj6.cloudfront.net
 
 ---
 
